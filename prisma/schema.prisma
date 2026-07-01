@@ -1,0 +1,845 @@
+// =============================================================================
+// Mattress Manufacturing ERP — Database Schema
+// -----------------------------------------------------------------------------
+// This ERP is the "Factory Operating System". It manages ONLY factory
+// operations. Accounting, billing, GST, ledgers, P&L, purchases and sales
+// invoicing all remain in Tally. This schema deliberately contains NO
+// accounting tables. The only financial-adjacent data imported from Tally is
+// the minimal invoice information required for warranty activation and dispatch
+// reconciliation (see the `tally` section below).
+//
+// Design principles honoured here:
+//   * Fully normalized, scalable, built for long-term growth.
+//   * No fixed Bill of Materials — manufacturing is formula driven.
+//   * Every stock movement is an immutable ledger entry (InventoryLedger).
+//   * Nothing operational is hard-deleted (soft-delete + audit trail).
+//   * Serial numbers are globally unique and traceable end to end.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Broad classification of inventory. Contingent and Scrap are kept physically
+/// and logically separate from normal stock and must never mix.
+enum InventoryType {
+  RAW_MATERIAL
+  SEMI_FINISHED
+  FINISHED_GOOD
+  CONTINGENT
+  SCRAP
+}
+
+/// Direction/reason for every inventory ledger movement. The ledger is the
+/// single source of truth; StockBalance is a derived cache.
+enum LedgerMovementType {
+  OPENING_BALANCE
+  PURCHASE_RECEIPT // goods received (qty only; costing stays in Tally)
+  MATERIAL_ISSUE // issued to a production order
+  MATERIAL_RETURN // returned from a production order
+  PRODUCTION_OUTPUT // finished / semi-finished produced
+  PRODUCTION_CONSUMPTION // raw consumed by production
+  CONTINGENT_RECOVERY // recoverable material created (foam/latex offcuts)
+  CONTINGENT_CONSUMPTION // contingent stock consumed back into production
+  SCRAP_GENERATION
+  WAREHOUSE_TRANSFER_OUT
+  WAREHOUSE_TRANSFER_IN
+  DISPATCH_ISSUE // finished goods leaving on dispatch
+  ADJUSTMENT_INCREASE // authorized correction
+  ADJUSTMENT_DECREASE // authorized correction
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  IN_PRODUCTION
+  PARTIALLY_DISPATCHED
+  DISPATCHED
+  CANCELLED
+}
+
+enum ProductionOrderStatus {
+  PLANNED
+  MATERIAL_CHECK
+  MATERIAL_RESERVED
+  MATERIAL_ISSUED
+  IN_PROGRESS
+  QC_PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ReservationStatus {
+  RESERVED
+  PARTIALLY_ISSUED
+  ISSUED
+  RELEASED
+}
+
+enum VarianceStatus {
+  WITHIN_TOLERANCE
+  EXCEPTION
+}
+
+enum QcResult {
+  PENDING
+  PASS
+  FAIL
+  REWORK
+}
+
+enum DispatchStatus {
+  PLANNED
+  READY
+  DISPATCHED
+  CANCELLED
+}
+
+enum WarrantyStatus {
+  PENDING_ACTIVATION // manufactured, not yet invoiced in Tally
+  ACTIVE
+  EXPIRED
+  VOID
+}
+
+enum ClaimStatus {
+  OPEN
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  REPLACED
+  CLOSED
+}
+
+enum FormulaVersionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+// =============================================================================
+// MASTER DATA
+// =============================================================================
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  fullName     String
+  email        String?  @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roles        UserRole[]
+  auditLogs    AuditLog[]
+  approvals    SalesOrder[] @relation("SalesOrderApprover")
+
+  @@map("users")
+}
+
+model Role {
+  id          String     @id @default(uuid())
+  name        String     @unique // e.g. ADMIN, PLANNER, OPERATOR, QC, STORE
+  description String?
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id])
+  role   Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model UnitOfMeasure {
+  id           String  @id @default(uuid())
+  code         String  @unique // CF, KG, MTR, PCS, SQM ...
+  name         String
+  /// Multiplier to the module's canonical base unit, for conversions.
+  baseFactor   Decimal @default(1) @db.Decimal(18, 6)
+
+  materials    Material[]
+  layers       TemplateLayer[]
+
+  @@map("units_of_measure")
+}
+
+model Brand {
+  id        String          @id @default(uuid())
+  name      String          @unique
+  code      String          @unique
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  models    MattressModel[]
+
+  @@map("brands")
+}
+
+model MaterialCategory {
+  id        String     @id @default(uuid())
+  name      String     @unique // Foam, Latex, Fabric, Spring, Adhesive, Zipper...
+  materials Material[]
+
+  @@map("material_categories")
+}
+
+/// Raw / semi-finished material master. Costing lives in Tally, not here.
+model Material {
+  id             String        @id @default(uuid())
+  code           String        @unique
+  name           String
+  categoryId     String
+  category       MaterialCategory @relation(fields: [categoryId], references: [id])
+  uomId          String
+  uom            UnitOfMeasure @relation(fields: [uomId], references: [id])
+  inventoryType  InventoryType @default(RAW_MATERIAL)
+  /// e.g. density for foam (32D), used by formulas/reporting.
+  density        Decimal?      @db.Decimal(18, 4)
+  isContingentEligible Boolean @default(false)
+  reorderLevel   Decimal?      @db.Decimal(18, 4)
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  stockBalances  StockBalance[]
+  ledgerEntries  InventoryLedger[]
+  layers         TemplateLayer[]
+  requirements   MaterialRequirement[]
+  reservations   MaterialReservation[]
+  consumptions   ProductionConsumption[]
+
+  @@index([categoryId])
+  @@map("materials")
+}
+
+model MattressModel {
+  id            String          @id @default(uuid())
+  brandId       String
+  brand         Brand           @relation(fields: [brandId], references: [id])
+  code          String          @unique
+  name          String
+  description   String?
+  warrantyPolicyId String?
+  warrantyPolicy   WarrantyPolicy? @relation(fields: [warrantyPolicyId], references: [id])
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  variants      ModelVariant[]
+
+  @@index([brandId])
+  @@map("mattress_models")
+}
+
+/// A concrete sellable configuration of a model. Dimensions may be fixed for
+/// a variant, or supplied per sales-order line for custom sizes.
+model ModelVariant {
+  id            String   @id @default(uuid())
+  modelId       String
+  model         MattressModel @relation(fields: [modelId], references: [id])
+  code          String   @unique
+  name          String
+  /// Nominal dimensions in inches; custom orders may override at order line.
+  defaultLength Decimal? @db.Decimal(10, 2)
+  defaultWidth  Decimal? @db.Decimal(10, 2)
+  defaultHeight Decimal? @db.Decimal(10, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  templates     ProductionTemplate[]
+  salesOrderLines SalesOrderLine[]
+  finishedGoods FinishedGood[]
+
+  @@index([modelId])
+  @@map("model_variants")
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  location  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  stockBalances    StockBalance[]
+  ledgerEntries    InventoryLedger[]
+  transfersOut     WarehouseTransfer[] @relation("TransferSource")
+  transfersIn      WarehouseTransfer[] @relation("TransferDestination")
+
+  @@map("warehouses")
+}
+
+model Dealer {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  region    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  salesOrders  SalesOrder[]
+  invoices     TallyInvoice[]
+  warranties   Warranty[]
+  claims       WarrantyClaim[]
+
+  @@map("dealers")
+}
+
+/// End customer (for warranty). Minimal — full CRM/ledger stays in Tally.
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  warranties Warranty[]
+  claims     WarrantyClaim[]
+
+  @@index([phone])
+  @@map("customers")
+}
+
+// =============================================================================
+// FORMULA ENGINE / PRODUCTION TEMPLATES
+// -----------------------------------------------------------------------------
+// Replaces fixed BoM. Each variant has one or more ProductionTemplates; each
+// template is versioned (FormulaVersionStatus) so formulas can evolve without
+// losing history. Consumption is computed at order time, never stored on the
+// template as a fixed quantity.
+// =============================================================================
+
+model ProductionTemplate {
+  id          String   @id @default(uuid())
+  variantId   String
+  variant     ModelVariant @relation(fields: [variantId], references: [id])
+  version     Int
+  status      FormulaVersionStatus @default(DRAFT)
+  /// Overall finished height in inches, or null if fully computed by layers.
+  overallHeight Decimal? @db.Decimal(10, 2)
+  notes       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  activatedAt DateTime?
+
+  layers      TemplateLayer[]
+  variables   TemplateVariable[]
+  productionOrders ProductionOrder[]
+
+  @@unique([variantId, version])
+  @@index([variantId, status])
+  @@map("production_templates")
+}
+
+/// Named inputs available to the formula engine for a template
+/// (e.g. LENGTH, WIDTH, OVERALL_HEIGHT). Values come from the sales-order line
+/// or the variant defaults; layer thicknesses become variables too.
+model TemplateVariable {
+  id          String   @id @default(uuid())
+  templateId  String
+  template    ProductionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  key         String   // canonical identifier used inside formulas, e.g. "LENGTH"
+  label       String
+  /// Optional constant default; sales order dimensions override these.
+  defaultValue Decimal? @db.Decimal(18, 6)
+
+  @@unique([templateId, key])
+  @@map("template_variables")
+}
+
+/// A single material layer within a template. The `formula` is a string
+/// expression evaluated by the Formula Engine at production time.
+model TemplateLayer {
+  id             String   @id @default(uuid())
+  templateId     String
+  template       ProductionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sequence       Int      // layer order, bottom to top
+  materialId     String
+  material       Material @relation(fields: [materialId], references: [id])
+  uomId          String
+  uom            UnitOfMeasure @relation(fields: [uomId], references: [id])
+  /// Formula expression, e.g. "LENGTH * WIDTH * THICKNESS / 1728".
+  formula        String
+  /// Optional fixed thickness (inches) for this layer; exposed to later layers
+  /// as a variable so height-remainder formulas work.
+  fixedThickness Decimal? @db.Decimal(10, 4)
+  /// Extra consumption to allow for wastage, expressed as a fraction (0.05 = 5%).
+  wastageRate    Decimal  @default(0) @db.Decimal(6, 4)
+  /// Acceptable +/- variance fraction before an exception is raised.
+  toleranceRate  Decimal  @default(0.01) @db.Decimal(6, 4)
+  isContingentEligible Boolean @default(false)
+  notes          String?
+
+  @@unique([templateId, sequence])
+  @@index([materialId])
+  @@map("template_layers")
+}
+
+// =============================================================================
+// INVENTORY
+// -----------------------------------------------------------------------------
+// InventoryLedger is append-only and authoritative. StockBalance is a derived
+// per (material, warehouse, type, batch) cache for fast lookups.
+// =============================================================================
+
+model StockBalance {
+  id            String        @id @default(uuid())
+  materialId    String?
+  material      Material?     @relation(fields: [materialId], references: [id])
+  finishedGoodVariantId String?
+  warehouseId   String
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+  inventoryType InventoryType
+  batchId       String?
+  batch         Batch?        @relation(fields: [batchId], references: [id])
+  quantity      Decimal       @default(0) @db.Decimal(18, 6)
+  reservedQty   Decimal       @default(0) @db.Decimal(18, 6)
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([materialId, warehouseId, inventoryType, batchId])
+  @@index([warehouseId, inventoryType])
+  @@map("stock_balances")
+}
+
+model InventoryLedger {
+  id            String            @id @default(uuid())
+  movementType  LedgerMovementType
+  inventoryType InventoryType
+  materialId    String?
+  material      Material?         @relation(fields: [materialId], references: [id])
+  warehouseId   String
+  warehouse     Warehouse         @relation(fields: [warehouseId], references: [id])
+  batchId       String?
+  batch         Batch?            @relation(fields: [batchId], references: [id])
+  serialNumberId String?
+  serialNumber  SerialNumber?     @relation(fields: [serialNumberId], references: [id])
+  /// Signed quantity: positive = increase, negative = decrease.
+  quantity      Decimal           @db.Decimal(18, 6)
+  /// Running balance snapshot after this movement (for the material/wh/type).
+  balanceAfter  Decimal           @db.Decimal(18, 6)
+  /// Free-form source reference: production order, dispatch, transfer, etc.
+  refType       String?
+  refId         String?
+  note          String?
+  createdById   String?
+  createdAt     DateTime          @default(now())
+
+  @@index([materialId, warehouseId, inventoryType])
+  @@index([refType, refId])
+  @@index([createdAt])
+  @@map("inventory_ledger")
+}
+
+model WarehouseTransfer {
+  id            String   @id @default(uuid())
+  reference     String   @unique
+  sourceId      String
+  source        Warehouse @relation("TransferSource", fields: [sourceId], references: [id])
+  destinationId String
+  destination   Warehouse @relation("TransferDestination", fields: [destinationId], references: [id])
+  status        String   @default("COMPLETED")
+  note          String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@map("warehouse_transfers")
+}
+
+// =============================================================================
+// BATCH & SERIAL TRACKING
+// =============================================================================
+
+model Batch {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  /// Production batch or supplier lot depending on inventory type.
+  materialId  String?
+  productionOrderId String?
+  manufacturedOn DateTime?
+  createdAt   DateTime @default(now())
+
+  stockBalances StockBalance[]
+  ledgerEntries InventoryLedger[]
+  serialNumbers SerialNumber[]
+
+  @@map("batches")
+}
+
+/// One physical finished mattress. Globally unique, traceable end to end.
+model SerialNumber {
+  id          String   @id @default(uuid())
+  serial      String   @unique
+  variantId   String?
+  batchId     String?
+  batch       Batch?   @relation(fields: [batchId], references: [id])
+  productionOrderId String?
+  finishedGoodId String?
+  finishedGood FinishedGood? @relation(fields: [finishedGoodId], references: [id])
+  createdAt   DateTime @default(now())
+
+  ledgerEntries InventoryLedger[]
+  warranty      Warranty?
+  dispatchLine  DispatchLine? @relation(fields: [dispatchLineId], references: [id])
+  dispatchLineId String?
+
+  @@index([batchId])
+  @@map("serial_numbers")
+}
+
+// =============================================================================
+// SALES ORDERS & PRODUCTION
+// =============================================================================
+
+model SalesOrder {
+  id           String           @id @default(uuid())
+  orderNumber  String           @unique
+  dealerId     String?
+  dealer       Dealer?          @relation(fields: [dealerId], references: [id])
+  status       SalesOrderStatus @default(DRAFT)
+  approvedById String?
+  approvedBy   User?            @relation("SalesOrderApprover", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  orderDate    DateTime         @default(now())
+  requiredDate DateTime?
+  note         String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  lines        SalesOrderLine[]
+  productionOrders ProductionOrder[]
+
+  @@index([status])
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id          String   @id @default(uuid())
+  salesOrderId String
+  salesOrder  SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  variantId   String
+  variant     ModelVariant @relation(fields: [variantId], references: [id])
+  quantity    Int
+  /// Custom dimensions override variant defaults; fed into the Formula Engine.
+  length      Decimal? @db.Decimal(10, 2)
+  width       Decimal? @db.Decimal(10, 2)
+  height      Decimal? @db.Decimal(10, 2)
+
+  productionOrders ProductionOrder[]
+
+  @@index([salesOrderId])
+  @@map("sales_order_lines")
+}
+
+model ProductionOrder {
+  id           String   @id @default(uuid())
+  orderNumber  String   @unique
+  salesOrderId String?
+  salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
+  salesOrderLineId String?
+  salesOrderLine SalesOrderLine? @relation(fields: [salesOrderLineId], references: [id])
+  templateId   String
+  template     ProductionTemplate @relation(fields: [templateId], references: [id])
+  status       ProductionOrderStatus @default(PLANNED)
+  quantity     Int
+  /// The dimension inputs actually used to compute requirements (snapshot).
+  length       Decimal? @db.Decimal(10, 2)
+  width        Decimal? @db.Decimal(10, 2)
+  height       Decimal? @db.Decimal(10, 2)
+  plannedDate  DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  requirements MaterialRequirement[]
+  reservations MaterialReservation[]
+  consumptions ProductionConsumption[]
+  variances    ProductionVariance[]
+  qcInspections QcInspection[]
+  finishedGoods FinishedGood[]
+
+  @@index([status])
+  @@index([salesOrderId])
+  @@map("production_orders")
+}
+
+/// Standard consumption computed by the Formula Engine at order approval.
+model MaterialRequirement {
+  id            String   @id @default(uuid())
+  productionOrderId String
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Material @relation(fields: [materialId], references: [id])
+  /// Per-unit standard quantity from the formula (pre-wastage).
+  baseQtyPerUnit Decimal @db.Decimal(18, 6)
+  wastageRate   Decimal  @db.Decimal(6, 4)
+  toleranceRate Decimal  @db.Decimal(6, 4)
+  /// Total standard requirement = (base * (1 + wastage)) * order quantity.
+  standardQty   Decimal  @db.Decimal(18, 6)
+  /// The evaluated formula string kept for full traceability/audit.
+  formulaSnapshot String
+  createdAt     DateTime @default(now())
+
+  @@unique([productionOrderId, materialId])
+  @@index([materialId])
+  @@map("material_requirements")
+}
+
+model MaterialReservation {
+  id            String   @id @default(uuid())
+  productionOrderId String
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Material @relation(fields: [materialId], references: [id])
+  quantity      Decimal  @db.Decimal(18, 6)
+  issuedQty     Decimal  @default(0) @db.Decimal(18, 6)
+  status        ReservationStatus @default(RESERVED)
+  createdAt     DateTime @default(now())
+
+  @@index([productionOrderId])
+  @@index([materialId])
+  @@map("material_reservations")
+}
+
+/// Actual quantity consumed on the floor. Operators confirm reality; the
+/// system pre-fills the standard so typing is minimal.
+model ProductionConsumption {
+  id            String   @id @default(uuid())
+  productionOrderId String
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Material @relation(fields: [materialId], references: [id])
+  actualQty     Decimal  @db.Decimal(18, 6)
+  contingentRecoveredQty Decimal @default(0) @db.Decimal(18, 6)
+  scrapQty      Decimal  @default(0) @db.Decimal(18, 6)
+  recordedById  String?
+  recordedAt    DateTime @default(now())
+
+  @@index([productionOrderId])
+  @@map("production_consumptions")
+}
+
+/// Standard vs actual, computed per material per production order.
+model ProductionVariance {
+  id            String   @id @default(uuid())
+  productionOrderId String
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  materialId    String
+  standardQty   Decimal  @db.Decimal(18, 6)
+  actualQty     Decimal  @db.Decimal(18, 6)
+  varianceQty   Decimal  @db.Decimal(18, 6) // actual - standard
+  variancePct   Decimal  @db.Decimal(8, 4)
+  toleranceRate Decimal  @db.Decimal(6, 4)
+  status        VarianceStatus
+  computedAt    DateTime @default(now())
+
+  @@unique([productionOrderId, materialId])
+  @@index([status])
+  @@map("production_variances")
+}
+
+model QcInspection {
+  id            String   @id @default(uuid())
+  productionOrderId String
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  result        QcResult @default(PENDING)
+  inspectedById String?
+  inspectedAt   DateTime?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([productionOrderId])
+  @@map("qc_inspections")
+}
+
+// =============================================================================
+// FINISHED GOODS & DISPATCH
+// =============================================================================
+
+model FinishedGood {
+  id            String   @id @default(uuid())
+  variantId     String
+  variant       ModelVariant @relation(fields: [variantId], references: [id])
+  productionOrderId String?
+  productionOrder ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  warehouseId   String?
+  createdAt     DateTime @default(now())
+
+  serialNumbers SerialNumber[]
+
+  @@index([variantId])
+  @@map("finished_goods")
+}
+
+model DispatchPlan {
+  id          String   @id @default(uuid())
+  reference   String   @unique
+  dealerId    String?
+  status      DispatchStatus @default(PLANNED)
+  plannedDate DateTime?
+  dispatchedAt DateTime?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  lines       DispatchLine[]
+
+  @@index([status])
+  @@map("dispatch_plans")
+}
+
+model DispatchLine {
+  id            String   @id @default(uuid())
+  dispatchPlanId String
+  dispatchPlan  DispatchPlan @relation(fields: [dispatchPlanId], references: [id], onDelete: Cascade)
+  variantId     String?
+  quantity      Int      @default(1)
+
+  serialNumbers SerialNumber[]
+
+  @@index([dispatchPlanId])
+  @@map("dispatch_lines")
+}
+
+// =============================================================================
+// TALLY INTEGRATION (import only)
+// -----------------------------------------------------------------------------
+// The ONLY data crossing from Tally: minimal invoice info for warranty
+// activation and dispatch reconciliation. No ledgers, no amounts, no GST.
+// =============================================================================
+
+model TallyInvoice {
+  id            String   @id @default(uuid())
+  invoiceNumber String   @unique
+  invoiceDate   DateTime
+  dealerId      String?
+  dealer        Dealer?  @relation(fields: [dealerId], references: [id])
+  customerName  String?
+  importedAt    DateTime @default(now())
+
+  lines         TallyInvoiceLine[]
+  warranties    Warranty[]
+
+  @@index([invoiceDate])
+  @@map("tally_invoices")
+}
+
+model TallyInvoiceLine {
+  id            String   @id @default(uuid())
+  invoiceId     String
+  invoice       TallyInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  /// Serial as printed on the label; matched to SerialNumber on import.
+  serial        String
+  quantity      Int      @default(1)
+
+  @@index([invoiceId])
+  @@index([serial])
+  @@map("tally_invoice_lines")
+}
+
+// =============================================================================
+// WARRANTY
+// -----------------------------------------------------------------------------
+// Warranty NEVER starts at manufacture. It activates only after invoice sync
+// from Tally; start date = invoice date; expiry computed from model policy.
+// =============================================================================
+
+model WarrantyPolicy {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  /// Total warranty length in months from invoice date.
+  durationMonths Int
+  /// Optional pro-rata / non-pro-rata split (months of full cover).
+  fullCoverMonths Int?
+  terms         String?
+  createdAt     DateTime @default(now())
+
+  models        MattressModel[]
+
+  @@map("warranty_policies")
+}
+
+model Warranty {
+  id            String   @id @default(uuid())
+  serialNumberId String  @unique
+  serialNumber  SerialNumber @relation(fields: [serialNumberId], references: [id])
+  invoiceId     String?
+  invoice       TallyInvoice? @relation(fields: [invoiceId], references: [id])
+  dealerId      String?
+  dealer        Dealer?  @relation(fields: [dealerId], references: [id])
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  status        WarrantyStatus @default(PENDING_ACTIVATION)
+  startDate     DateTime? // = invoice date
+  expiryDate    DateTime? // computed from policy
+  activatedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  claims        WarrantyClaim[]
+
+  @@index([status])
+  @@map("warranties")
+}
+
+model WarrantyClaim {
+  id            String   @id @default(uuid())
+  claimNumber   String   @unique
+  warrantyId    String
+  warranty      Warranty @relation(fields: [warrantyId], references: [id])
+  dealerId      String?
+  dealer        Dealer?  @relation(fields: [dealerId], references: [id])
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  status        ClaimStatus @default(OPEN)
+  reason        String?
+  reportedAt    DateTime @default(now())
+  resolvedAt    DateTime?
+  /// If replaced, the serial of the replacement unit.
+  replacementSerial String?
+  createdAt     DateTime @default(now())
+
+  @@index([status])
+  @@index([warrantyId])
+  @@map("warranty_claims")
+}
+
+// =============================================================================
+// AUDIT
+// -----------------------------------------------------------------------------
+// Every important action recorded. Nothing operational is hard-deleted.
+// =============================================================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String   // CREATE, UPDATE, APPROVE, REJECT, ADJUST, LOGIN ...
+  entityType  String   // table/model name
+  entityId    String?
+  /// Before/after snapshots for full historical integrity.
+  changes     Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
