@@ -12,8 +12,42 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
+import { hashPassword } from '../src/auth/password.util';
 
 const prisma = new PrismaClient();
+
+/** Create the standard roles and an initial admin user (idempotent). */
+async function seedAuth(): Promise<void> {
+  const roleNames = ['ADMIN', 'PLANNER', 'STORE', 'OPERATOR', 'QC'];
+  const roleIds = new Map<string, string>();
+  for (const name of roleNames) {
+    const role = await prisma.role.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+    roleIds.set(name, role.id);
+  }
+
+  const existing = await prisma.user.findUnique({ where: { username: 'admin' } });
+  if (!existing) {
+    const password = process.env.SEED_ADMIN_PASSWORD ?? 'admin12345';
+    const user = await prisma.user.create({
+      data: {
+        username: 'admin',
+        fullName: 'System Administrator',
+        passwordHash: await hashPassword(password),
+        roles: { create: [{ roleId: roleIds.get('ADMIN')! }] },
+      },
+    });
+    console.log(
+      `Created admin user '${user.username}'.` +
+        (process.env.SEED_ADMIN_PASSWORD
+          ? ''
+          : " Default password 'admin12345' — change it immediately."),
+    );
+  }
+}
 
 interface CatalogLayer {
   key: string;
@@ -49,6 +83,8 @@ function categoryFor(name: string): string {
 }
 
 async function main(): Promise<void> {
+  await seedAuth();
+
   const catalog = JSON.parse(
     fs.readFileSync(
       path.join(__dirname, 'data', 'model-catalog.json'),

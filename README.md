@@ -123,6 +123,10 @@ npm run start:dev
   golden-master test suite (`catalog.spec.ts`) asserting the engine reproduces
   every spreadsheet value
 - Seed that loads the whole catalog as `ACTIVE` production templates
+- **Phase 1 — master data & auth**: JWT authentication + role-based access
+  (ADMIN/PLANNER/STORE/OPERATOR/QC), CRUD + search/pagination + bulk Excel
+  import for all core reference entities, and a global audit-log interceptor.
+  See [`docs/API.md`](docs/API.md).
 
 Feature modules (Inventory, Production, Dispatch, Warranty, …) build on this
 base — each adhering to the principles above. See

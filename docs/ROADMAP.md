@@ -16,12 +16,17 @@ serial traceability, audit trail, automation over typing).
       engine reproduces every spreadsheet value
 - [x] Seed that loads the full model catalog as ACTIVE production templates
 
-## Phase 1 — Master data & authentication
+## Phase 1 — Master data & authentication ✅
 
-- [ ] Auth (JWT) + role-based guards (ADMIN, PLANNER, STORE, OPERATOR, QC)
-- [ ] CRUD + bulk Excel import for brands, models, variants, materials, UoM,
-      warehouses, dealers, customers
-- [ ] Audit-log interceptor wired to all mutations
+- [x] Auth (JWT) + role-based guards (ADMIN, PLANNER, STORE, OPERATOR, QC),
+      dependency-free scrypt password hashing, `@Public`/`@Roles`/`@CurrentUser`
+- [x] CRUD + list/search/paginate + bulk Excel import for brands, models,
+      variants, materials, UoM, material categories, warehouses, dealers,
+      customers (generic `CrudService` + `BaseCrudController`)
+- [x] Audit-log interceptor wired globally to all mutations (with secret
+      redaction)
+- [x] Global JWT auth + roles guards + validation pipe; seed creates roles and
+      an initial admin user
 
 ## Phase 2 — Inventory core
 
