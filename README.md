@@ -114,8 +114,17 @@ npm run start:dev
 
 ## Status
 
-This is the **project foundation**: the complete database schema for every
-module in the specification, a working and tested Formula Engine, and the
-application scaffold. Feature modules (Inventory, Production, Dispatch,
-Warranty, …) are built on top of this base — each adhering to the principles
-above. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+**Foundation + Excel migration complete.** In place today:
+
+- Complete database schema for every module in the specification
+- A working, tested **Formula Engine** (two-phase: thickness → usage)
+- **All 16 factory models migrated** from the Excel workbooks into
+  [`prisma/data/model-catalog.json`](prisma/data/model-catalog.json), with a
+  golden-master test suite (`catalog.spec.ts`) asserting the engine reproduces
+  every spreadsheet value
+- Seed that loads the whole catalog as `ACTIVE` production templates
+
+Feature modules (Inventory, Production, Dispatch, Warranty, …) build on this
+base — each adhering to the principles above. See
+[`docs/ROADMAP.md`](docs/ROADMAP.md) and
+[`docs/FORMULA_ENGINE.md`](docs/FORMULA_ENGINE.md).

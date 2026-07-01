@@ -21,14 +21,33 @@ A model variant has one or more **Production Templates**, each **versioned**
 
 ```
 ProductionTemplate (version N)
-├── TemplateVariable[]   LENGTH, WIDTH, OVERALL_HEIGHT, ...
-└── TemplateLayer[]      sequence, material, uom, formula,
-                         fixedThickness, wastageRate, toleranceRate,
-                         isContingentEligible
+├── TemplateVariable[]   LENGTH, WIDTH, HEIGHT, BORDER_WIDTH, ...
+└── TemplateLayer[]      sequence, material, uom, layerKey,
+                         thicknessFormula, usageFormula,
+                         wastageRate, toleranceRate, isContingentEligible
 ```
 
-Formulas are **Admin-editable at runtime** — adding a model or changing a
-formula requires **no source-code changes**.
+Each `TemplateLayer` mirrors one row of the Excel Data sheet's WORKINGS table:
+`thicknessFormula` is the "USAGE"/E column and `usageFormula` is the
+"PER UNIT"/G column. Formulas are **Admin-editable at runtime** — adding a
+model or changing a formula requires **no source-code changes**.
+
+## Two-phase evaluation (matches the spreadsheet)
+
+The engine evaluates a template in the same two steps Excel does:
+
+1. **Thickness** (E column): resolve every layer's `thicknessFormula`. A
+   thickness may be a constant (`"2"`), the full `HEIGHT`, or a **remainder**
+   referencing *other* layers by their `layerKey` (`"HEIGHT - L1 - L2"`).
+   Because a remainder can reference a layer listed **later** (e.g. Snuggle's
+   rebonded foam = `HEIGHT - L1 - L6`), resolution is dependency-ordered via an
+   iterative fixpoint. Circular references are detected and rejected.
+2. **Usage per unit** (G column): evaluate each layer's `usageFormula` with the
+   dimensions, this layer's resolved `THICKNESS`, and every layer's thickness
+   by `layerKey`.
+
+Final usage (H column) = per-unit × order quantity, with optional wastage on
+top (the spreadsheets apply none).
 
 ## The expression language
 
@@ -48,33 +67,42 @@ or a non-finite result all throw a `FormulaError`.
 | Variable                 | Source                                                         |
 | ------------------------ | ------------------------------------------------------------- |
 | `LENGTH`, `WIDTH`, `HEIGHT` | Sales-order line dimensions (or variant defaults)          |
-| `OVERALL_HEIGHT`         | Template `overallHeight` or an order input                    |
-| `THICKNESS`              | *This* layer's `fixedThickness` (convenience alias)           |
-| `LAYER{n}_THICKNESS`     | The `fixedThickness` of layer *n* — visible to **later** layers |
+| `BORDER_WIDTH`           | Border fabric roll width (order input / template default)     |
+| `THICKNESS`              | *This* layer's resolved thickness (from `thicknessFormula`)   |
+| `L1`, `L2`, … (`layerKey`) | Any layer's resolved thickness — usable by any other layer   |
 | any `TemplateVariable`   | Named constants/defaults declared on the template             |
 
-**Layer-thickness chaining** is what makes height-remainder formulas work:
-each layer with a fixed thickness publishes `LAYER{sequence}_THICKNESS` to the
-layers above it.
+## The four calculation types (from the workbooks)
 
-## Worked example (from the spec)
+Every layer across all 16 models reduces to one of these usage formulas:
 
-An 8″ mattress, 72″ × 60″, three layers:
+| Type          | `usageFormula`                                                        | UoM  |
+| ------------- | -------------------------------------------------------------------- | ---- |
+| Volume        | `LENGTH * WIDTH * THICKNESS / 1728`                                   | CFT  |
+| Border fabric | `((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100` | MTR  |
+| Face fabric   | `(WIDTH + 5) * 2.54 / 100`  (top & bottom)                           | MTR  |
+| Bonnel spring | `LENGTH * WIDTH / 144`                                                | SQFT |
+| Fixed count   | `1`  (e.g. pocketed spring unit)                                      | PCS  |
 
-| # | Material            | Formula                                                                 | Fixed thk |
-| - | ------------------- | ---------------------------------------------------------------------- | --------- |
-| 1 | 32D Super Soft Foam | `LENGTH * WIDTH * THICKNESS / 1728`                                     | 2″        |
-| 2 | Latex               | `LENGTH * WIDTH * THICKNESS / 1728`                                     | 1″        |
-| 3 | HR Foam             | `LENGTH * WIDTH * (OVERALL_HEIGHT - LAYER1_THICKNESS - LAYER2_THICKNESS) / 1728` | —  |
+`/1728` converts cubic inches → cubic feet; `/144` converts square inches →
+square feet; `× 2.54 / 100` converts inches → metres. These are the factory's
+standard divisors, taken verbatim from the spreadsheets.
 
-For `LENGTH=72, WIDTH=60, OVERALL_HEIGHT=8`:
+## Worked example (Spinal Aligner, from the workbook)
 
-- Layer 1 = 72 × 60 × 2 / 1728 = **5.0 CF**
-- Layer 2 = 72 × 60 × 1 / 1728 = **2.5 CF**
-- Layer 3 = 72 × 60 × (8 − 2 − 1) / 1728 = 72 × 60 × 5 / 1728 = **12.5 CF**
-  - with 5% wastage → **13.125 CF**
+A 6″ mattress, 75″ × 60″, border width 82″, quantity 3:
 
-`/1728` converts cubic inches to cubic feet — the factory's standard divisor.
+| # | Material       | thicknessFormula   | usageFormula                          | per-unit |
+| - | -------------- | ------------------ | ------------------------------------- | -------- |
+| 1 | 32D SS Foam    | `1`                | `LENGTH * WIDTH * THICKNESS / 1728`   | 2.604 CFT |
+| 2 | 32D HR Foam    | `1`                | `LENGTH * WIDTH * THICKNESS / 1728`   | 2.604 CFT |
+| 3 | Rebonded Foam  | `HEIGHT - L1 - L2` | `LENGTH * WIDTH * THICKNESS / 1728`   | 10.417 CFT |
+| 4 | Border Fabric  | —                  | border formula                        | 0.596 MTR |
+| 5 | Top Fabric     | —                  | `(WIDTH + 5) * 2.54 / 100`            | 1.651 MTR |
+| 6 | Bottom Fabric  | —                  | `(WIDTH + 5) * 2.54 / 100`            | 1.651 MTR |
+
+Layer 3's thickness = 6 − 1 − 1 = 4″, so 75 × 60 × 4 / 1728 = **10.4167 CFT**;
+× 3 units = **31.25 CFT** final usage — matching the spreadsheet exactly.
 
 ## API
 
@@ -101,20 +129,33 @@ totals (a material appearing in multiple layers is summed). These totals become
   material as `WITHIN_TOLERANCE` or `EXCEPTION`. Exceptions drive the variance
   dashboard.
 
-## Migrating the Excel workbooks
+## Excel workbook migration — done
 
-The factory's existing workbooks are the manufacturing standard. Migration
-converts each spreadsheet calculation into template layers + formulas **without
-simplifying the logic**. Recommended process:
+The factory's two workbooks (`Napcat_WO_Processing.xlsx` and
+`WORK_ORDER_PROCESSING.xlsx`) have been fully migrated. All **16 production
+models** were extracted verbatim into
+[`prisma/data/model-catalog.json`](../prisma/data/model-catalog.json) — layers,
+materials, thickness rules, usage formulas and units — **without simplifying any
+logic**. The catalog also records each model's sample inputs and the exact
+per-unit values Excel produces.
 
-1. Identify each model's layers, materials, thickness rules and divisors.
-2. Express each cell's calculation as a layer `formula` using the variables
-   above (add `TemplateVariable`s for any model-specific constants).
-3. Load them as an `ACTIVE` `ProductionTemplate` version.
-4. Validate: run known orders through `computeRequirement` and compare against
-   the spreadsheet outputs until they match to the expected precision.
-5. Retire the spreadsheet for that model.
+Models migrated: Eco Plus, Toss, Spinal Aligner, Snuggle, Guardian, Hybrid
+Siesta, Empress, Empress Plus, Nirvana, Legend (workbook 1); Comfort, Comfort
+Plus, Signature, Aurora, Aurora Pro, Italiano (workbook 2).
 
-> The Excel files were not present in the repository at foundation time. Once
-> provided, they can be imported model-by-model with the process above; the
-> engine already supports the arithmetic those sheets use.
+**Golden-master verification:** `catalog.spec.ts` runs every model through the
+engine and asserts each layer's per-unit output matches the spreadsheet value.
+All models pass — the engine has fully replaced the spreadsheets.
+
+`npm run db:seed` loads the entire catalog into the database as `ACTIVE`
+production templates. To add or change a model, edit the catalog (or the
+templates directly via the future admin UI) — **no source changes needed**.
+
+### Adding a new model later
+
+1. Identify its layers, materials, thickness rules and divisors.
+2. Add an entry to the catalog with `thickness`/`usage` expressions using the
+   variables above.
+3. Add its Excel-verified `expectedPerUnit` values so the golden-master test
+   guards it.
+4. Seed (or create the template via the admin UI) and confirm the test passes.

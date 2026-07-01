@@ -1,0 +1,197 @@
+{
+  "_comment": "Extracted verbatim from the factory Excel workbooks (Napcat_WO_Processing.xlsx and WORK_ORDER_PROCESSING.xlsx). Each model's layers preserve the Data-sheet order so layerKey (L1, L2, ...) matches the sheet's E-column row references. usage/thickness are Formula Engine expressions equivalent to the spreadsheet formulas. expectedPerUnit are the exact per-unit values Excel produces for the given sampleInputs, used by the verification test suite.",
+  "canonicalFormulas": {
+    "VOLUME_CFT": "LENGTH * WIDTH * THICKNESS / 1728",
+    "BORDER_FABRIC_MTR": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100",
+    "FACE_FABRIC_MTR": "(WIDTH + 5) * 2.54 / 100",
+    "BONNEL_SPRING_SQFT": "LENGTH * WIDTH / 144",
+    "FIXED_COUNT": "1"
+  },
+  "units": {
+    "CFT": "Cubic Feet", "MTR": "Metre", "SQFT": "Square Feet", "PCS": "Pieces"
+  },
+  "models": [
+    {
+      "brand": "Napcat", "code": "ECO-PLUS", "name": "Eco Plus", "sourceSheet": "ECO Plus",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "28 D HR Foam", "uom": "CFT", "thickness": "HEIGHT", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 15.625, "contingentEligible": true },
+        { "key": "L2", "material": "Border Fabric (Knitted 160 GSM Quilted)", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L3", "material": "Top Fabric (Knitted 160 GSM Quilted)", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L4", "material": "Bottom Fabric (Knitted 160 GSM)", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "TOSS", "name": "Toss", "sourceSheet": "Toss",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "32 D SS Foam", "uom": "CFT", "thickness": "2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 5.208333333333333, "contingentEligible": true },
+        { "key": "L2", "material": "32 D HR Foam", "uom": "CFT", "thickness": "HEIGHT - L1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 10.416666666666666, "contingentEligible": true },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "SPINAL-ALIGNER", "name": "Spinal Aligner", "sourceSheet": "Spinal Aligner",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "32D SS Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L2", "material": "32D HR Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L3", "material": "Rebonded Foam", "uom": "CFT", "thickness": "HEIGHT - L1 - L2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 10.416666666666666 },
+        { "key": "L4", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L5", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L6", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "SNUGGLE", "name": "Snuggle", "sourceSheet": "Snuggle",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "32 D SS Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L2", "material": "Rebonded Foam", "uom": "CFT", "thickness": "HEIGHT - L1 - L6", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 7.8125 },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L6", "material": "Coir Sheet", "uom": "CFT", "thickness": "2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 5.208333333333333 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "GUARDIAN", "name": "Guardian", "sourceSheet": "Guardian",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 72, "HEIGHT": 8, "BORDER_WIDTH": 82, "QUANTITY": 2 },
+      "layers": [
+        { "key": "L1", "material": "32 D SS Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 3.125, "contingentEligible": true },
+        { "key": "L2", "material": "65 Memory Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 3.125 },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.8335536585365854 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L6", "material": "32D HR Foam", "uom": "CFT", "thickness": "HEIGHT - L1 - L2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 18.75 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "HYBRID-SIESTA", "name": "Hybrid Siesta", "sourceSheet": "Hybrid Siesta",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "32D SS Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L2", "material": "Pocketed Springs", "uom": "PCS", "thickness": null, "usage": "1", "expectedPerUnit": 1 },
+        { "key": "L3", "material": "32D HR Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L4", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L5", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L6", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "EMPRESS", "name": "Empress", "sourceSheet": "Empress",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 72, "HEIGHT": 8, "BORDER_WIDTH": 82, "QUANTITY": 2 },
+      "layers": [
+        { "key": "L1", "material": "32 D SS Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 3.125, "contingentEligible": true },
+        { "key": "L2", "material": "75 Latex", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 3.125, "contingentEligible": true },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.8335536585365854 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L6", "material": "32D HR Foam", "uom": "CFT", "thickness": "HEIGHT - L1 - L2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 18.75 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "EMPRESS-PLUS", "name": "Empress Plus", "sourceSheet": "Empress Plus",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 72, "HEIGHT": 8, "BORDER_WIDTH": 82, "QUANTITY": 2 },
+      "layers": [
+        { "key": "L1", "material": "75 Latex", "uom": "CFT", "thickness": "2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 6.25, "contingentEligible": true },
+        { "key": "L2", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.8335536585365854 },
+        { "key": "L3", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L4", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L5", "material": "32D HR Foam", "uom": "CFT", "thickness": "HEIGHT - L1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 18.75 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "NIRVANA", "name": "Nirvana", "sourceSheet": "Nirvana",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 72, "HEIGHT": 8, "BORDER_WIDTH": 56, "QUANTITY": 2 },
+      "layers": [
+        { "key": "L1", "material": "85 Latex", "uom": "CFT", "thickness": "HEIGHT", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 25, "contingentEligible": true },
+        { "key": "L2", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 1.2205607142857144 },
+        { "key": "L3", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L4", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "LEGEND", "name": "Legend", "sourceSheet": "Legend ",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 72, "HEIGHT": 8, "BORDER_WIDTH": 82, "QUANTITY": 2 },
+      "layers": [
+        { "key": "L1", "material": "75D Latex", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 3.125, "contingentEligible": true },
+        { "key": "L2", "material": "65 Memory Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 3.125 },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.8335536585365854 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.9558000000000002 },
+        { "key": "L6", "material": "32D HR Foam", "uom": "CFT", "thickness": "HEIGHT - L1 - L2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 18.75 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "COMFORT", "name": "Comfort", "sourceSheet": "Comfort",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "28 D HR Foam", "uom": "CFT", "thickness": "0", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 0, "contingentEligible": true },
+        { "key": "L2", "material": "23 D PU Foam", "uom": "CFT", "thickness": "HEIGHT", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 15.625, "contingentEligible": true },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "COMFORT-PLUS", "name": "Comfort Plus", "sourceSheet": "Comfort Plus",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "28 D HR Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L2", "material": "23 D PU Foam", "uom": "CFT", "thickness": "HEIGHT - L1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 13.020833333333334, "contingentEligible": true },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "SIGNATURE", "name": "Signature", "sourceSheet": "Signature",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "28 D HR Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L2", "material": "Bonnel Springs", "uom": "SQFT", "thickness": "HEIGHT - L1", "usage": "LENGTH * WIDTH / 144", "expectedPerUnit": 31.25 },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "AURORA", "name": "Aurora", "sourceSheet": "Aurora",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "32 D SS Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L2", "material": "Rebonded Latex", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L6", "material": "28D HR Foam", "uom": "CFT", "thickness": "HEIGHT - L1 - L2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 10.416666666666666 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "AURORA-PRO", "name": "Aurora Pro", "sourceSheet": "Aurora Pro",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "32 D SS Foam", "uom": "CFT", "thickness": "1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 2.6041666666666665, "contingentEligible": true },
+        { "key": "L2", "material": "Rebonded Latex", "uom": "CFT", "thickness": "2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 5.208333333333333, "contingentEligible": true },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L6", "material": "28D HR Foam", "uom": "CFT", "thickness": "HEIGHT - L1 - L2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 7.8125 }
+      ]
+    },
+    {
+      "brand": "Napcat", "code": "ITALIANO", "name": "Italiano", "sourceSheet": "ITALIANO",
+      "sampleInputs": { "LENGTH": 75, "WIDTH": 60, "HEIGHT": 6, "BORDER_WIDTH": 82, "QUANTITY": 3 },
+      "layers": [
+        { "key": "L1", "material": "Graphite Latex", "uom": "CFT", "thickness": "2", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 5.208333333333333, "contingentEligible": true },
+        { "key": "L2", "material": "Rebonded Latex", "uom": "CFT", "thickness": "HEIGHT - L1", "usage": "LENGTH * WIDTH * THICKNESS / 1728", "expectedPerUnit": 10.416666666666666, "contingentEligible": true },
+        { "key": "L3", "material": "Border Fabric", "uom": "MTR", "thickness": null, "usage": "((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100", "expectedPerUnit": 0.5962804878048781 },
+        { "key": "L4", "material": "Top Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 },
+        { "key": "L5", "material": "Bottom Fabric", "uom": "MTR", "thickness": null, "usage": "(WIDTH + 5) * 2.54 / 100", "expectedPerUnit": 1.651 }
+      ]
+    }
+  ]
+}

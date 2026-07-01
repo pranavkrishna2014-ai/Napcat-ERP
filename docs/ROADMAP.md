@@ -11,7 +11,10 @@ serial traceability, audit trail, automation over typing).
 - [x] **Formula Engine** core — safe evaluator, requirement calculation,
       variance, with tests
 - [x] Architecture, data-model and formula-engine documentation
-- [x] Demo seed reproducing the spec's three-layer example
+- [x] **Excel workbook migration**: all 16 factory models extracted into
+      `prisma/data/model-catalog.json`, with golden-master tests verifying the
+      engine reproduces every spreadsheet value
+- [x] Seed that loads the full model catalog as ACTIVE production templates
 
 ## Phase 1 — Master data & authentication
 
@@ -59,7 +62,8 @@ serial traceability, audit trail, automation over typing).
 
 ## Cross-cutting (ongoing)
 
-- [ ] Excel workbook migration into production templates (see FORMULA_ENGINE.md)
+- [x] Excel workbook migration into production templates (see FORMULA_ENGINE.md)
+- [ ] Migrate the "Custom" work-order sheets (free-dimension entry) once rules confirmed
 - [ ] Operator-friendly UI: minimal typing, large buttons, fast search,
       barcode/QR, keyboard-first
 - [ ] Automated tests per module

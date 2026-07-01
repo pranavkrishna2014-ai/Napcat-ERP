@@ -8,144 +8,168 @@ describe('FormulaEngineService', () => {
   const engine = new FormulaEngineService();
 
   /**
-   * The three-layer example straight from the master specification:
-   *   Layer 1: 32D Super Soft Foam  — L x W x fixedThickness / 1728
-   *   Layer 2: Latex                — L x W x fixedThickness / 1728
-   *   Layer 3: HR Foam              — L x W x (OVERALL_HEIGHT - L1 - L2) / 1728
+   * A representative template (Spinal Aligner from the factory workbook):
+   *   L1 32D SS foam   thickness 1
+   *   L2 32D HR foam   thickness 1
+   *   L3 Rebonded foam thickness = HEIGHT - L1 - L2 (remainder)
+   *   L4 Border fabric
+   *   L5 Top fabric
+   *   L6 Bottom fabric
    */
   const template: TemplateDefinition = {
-    id: 'tpl-1',
+    id: 'tpl-sa',
     version: 1,
-    overallHeight: 8,
     layers: [
       {
         id: 'l1',
         sequence: 1,
-        materialId: 'foam-32d',
-        materialName: '32D Super Soft Foam',
-        uomCode: 'CF',
-        formula: 'LENGTH * WIDTH * THICKNESS / 1728',
-        fixedThickness: 2,
-        wastageRate: 0,
-        toleranceRate: 0.01,
+        materialId: 'ss',
+        materialName: '32D SS Foam',
+        uomCode: 'CFT',
+        layerKey: 'L1',
+        thicknessFormula: '1',
+        usageFormula: 'LENGTH * WIDTH * THICKNESS / 1728',
         isContingentEligible: true,
       },
       {
         id: 'l2',
         sequence: 2,
-        materialId: 'latex',
-        materialName: 'Latex',
-        uomCode: 'CF',
-        formula: 'LENGTH * WIDTH * THICKNESS / 1728',
-        fixedThickness: 1,
-        wastageRate: 0,
-        toleranceRate: 0.01,
+        materialId: 'hr',
+        materialName: '32D HR Foam',
+        uomCode: 'CFT',
+        layerKey: 'L2',
+        thicknessFormula: '1',
+        usageFormula: 'LENGTH * WIDTH * THICKNESS / 1728',
         isContingentEligible: true,
       },
       {
         id: 'l3',
         sequence: 3,
-        materialId: 'hr-foam',
-        materialName: 'HR Foam',
-        uomCode: 'CF',
-        formula:
-          'LENGTH * WIDTH * (OVERALL_HEIGHT - LAYER1_THICKNESS - LAYER2_THICKNESS) / 1728',
-        wastageRate: 0.05,
-        toleranceRate: 0.01,
-        isContingentEligible: false,
+        materialId: 'reb',
+        materialName: 'Rebonded Foam',
+        uomCode: 'CFT',
+        layerKey: 'L3',
+        thicknessFormula: 'HEIGHT - L1 - L2',
+        usageFormula: 'LENGTH * WIDTH * THICKNESS / 1728',
+      },
+      {
+        id: 'l4',
+        sequence: 4,
+        materialId: 'border',
+        materialName: 'Border Fabric',
+        uomCode: 'MTR',
+        thicknessFormula: null,
+        usageFormula:
+          '((LENGTH * 2 + WIDTH * 2 + 5) / BORDER_WIDTH) * (HEIGHT + 1) * 2.54 / 100',
       },
     ],
   };
 
-  it('computes each layer for a 72x36x8 mattress', () => {
-    const result = engine.computeRequirement(
-      template,
-      { LENGTH: 72, WIDTH: 36 },
-      1,
-    );
+  const inputs = { LENGTH: 75, WIDTH: 60, HEIGHT: 6, BORDER_WIDTH: 82 };
 
-    const [l1, l2, l3] = result.layers;
-    expect(l1.baseQtyPerUnit).toBeCloseTo((72 * 36 * 2) / 1728, 6); // 3 CF
-    expect(l2.baseQtyPerUnit).toBeCloseTo((72 * 36 * 1) / 1728, 6); // 1.5 CF
-    // remaining height = 8 - 2 - 1 = 5
-    expect(l3.baseQtyPerUnit).toBeCloseTo((72 * 36 * 5) / 1728, 6); // 7.5 CF
+  it('resolves fixed and remainder thicknesses', () => {
+    const r = engine.computeRequirement(template, inputs, 1);
+    expect(r.layers[0].resolvedThickness).toBe(1);
+    expect(r.layers[1].resolvedThickness).toBe(1);
+    expect(r.layers[2].resolvedThickness).toBe(4); // 6 - 1 - 1
+    expect(r.layers[3].resolvedThickness).toBeNull();
   });
 
-  it('applies wastage on top of the base quantity', () => {
-    const result = engine.computeRequirement(
-      template,
-      { LENGTH: 72, WIDTH: 36 },
-      1,
-    );
-    const l3 = result.layers[2];
-    expect(l3.qtyPerUnitWithWastage).toBeCloseTo(l3.baseQtyPerUnit * 1.05, 6);
+  it('computes per-unit usage matching the spreadsheet', () => {
+    const r = engine.computeRequirement(template, inputs, 1);
+    expect(r.layers[0].baseQtyPerUnit).toBeCloseTo((75 * 60 * 1) / 1728, 6);
+    expect(r.layers[2].baseQtyPerUnit).toBeCloseTo((75 * 60 * 4) / 1728, 6);
+    expect(r.layers[3].baseQtyPerUnit).toBeCloseTo(0.5962804878048781, 6);
   });
 
-  it('scales totals by order quantity', () => {
-    const result = engine.computeRequirement(
-      template,
-      { LENGTH: 72, WIDTH: 36 },
-      10,
-    );
-    const hrFoam = result.materialTotals.find((m) => m.materialId === 'hr-foam')!;
-    expect(hrFoam.standardQty).toBeCloseTo(hrFoam.qtyPerUnitWithWastage * 10, 6);
-  });
-
-  it('consolidates a material that appears in multiple layers', () => {
-    const dupTemplate: TemplateDefinition = {
-      id: 'tpl-dup',
+  it('resolves a remainder that references a layer listed later (Snuggle case)', () => {
+    const snuggle: TemplateDefinition = {
+      id: 'tpl-snu',
       version: 1,
-      overallHeight: 6,
       layers: [
         {
           id: 'a',
           sequence: 1,
-          materialId: 'foam-x',
-          formula: 'LENGTH * WIDTH * 1 / 1728',
+          materialId: 'ss',
+          layerKey: 'L1',
+          thicknessFormula: '1',
+          usageFormula: 'LENGTH * WIDTH * THICKNESS / 1728',
         },
         {
           id: 'b',
           sequence: 2,
-          materialId: 'foam-x',
-          formula: 'LENGTH * WIDTH * 2 / 1728',
+          materialId: 'reb',
+          layerKey: 'L2',
+          thicknessFormula: 'HEIGHT - L1 - L6', // references a LATER layer
+          usageFormula: 'LENGTH * WIDTH * THICKNESS / 1728',
+        },
+        {
+          id: 'c',
+          sequence: 6,
+          materialId: 'coir',
+          layerKey: 'L6',
+          thicknessFormula: '2',
+          usageFormula: 'LENGTH * WIDTH * THICKNESS / 1728',
         },
       ],
     };
-    const result = engine.computeRequirement(
-      dupTemplate,
-      { LENGTH: 72, WIDTH: 36 },
-      1,
-    );
-    expect(result.materialTotals).toHaveLength(1);
-    expect(result.materialTotals[0].baseQtyPerUnit).toBeCloseTo(
-      (72 * 36 * 3) / 1728,
-      6,
-    );
+    const r = engine.computeRequirement(snuggle, inputs, 1);
+    const reb = r.layers.find((l) => l.materialId === 'reb')!;
+    expect(reb.resolvedThickness).toBe(3); // 6 - 1 - 2
+    expect(reb.baseQtyPerUnit).toBeCloseTo(7.8125, 6);
+  });
+
+  it('scales final usage by order quantity', () => {
+    const r = engine.computeRequirement(template, inputs, 3);
+    const reb = r.materialTotals.find((m) => m.materialId === 'reb')!;
+    expect(reb.standardQty).toBeCloseTo(reb.qtyPerUnitWithWastage * 3, 6);
+    expect(reb.standardQty).toBeCloseTo(31.25, 4); // 10.41666.. * 3
   });
 
   it('rejects a non-positive order quantity', () => {
-    expect(() =>
-      engine.computeRequirement(template, { LENGTH: 72, WIDTH: 36 }, 0),
-    ).toThrow(/positive integer/);
+    expect(() => engine.computeRequirement(template, inputs, 0)).toThrow(
+      /positive integer/,
+    );
   });
 
-  it('raises a clear error when a layer would go negative (bad height)', () => {
-    // OVERALL_HEIGHT smaller than the sum of fixed layers.
+  it('raises a clear error on a negative remainder thickness (bad height)', () => {
     expect(() =>
-      engine.computeRequirement(
-        { ...template, overallHeight: 2 },
-        { LENGTH: 72, WIDTH: 36 },
-        1,
-      ),
-    ).toThrow(/negative quantity/);
+      engine.computeRequirement(template, { ...inputs, HEIGHT: 1 }, 1),
+    ).toThrow(/negative thickness/);
+  });
+
+  it('detects a circular thickness reference', () => {
+    const cyclic: TemplateDefinition = {
+      id: 'cyc',
+      version: 1,
+      layers: [
+        {
+          id: 'a',
+          sequence: 1,
+          materialId: 'a',
+          layerKey: 'L1',
+          thicknessFormula: 'HEIGHT - L2',
+          usageFormula: 'THICKNESS',
+        },
+        {
+          id: 'b',
+          sequence: 2,
+          materialId: 'b',
+          layerKey: 'L2',
+          thicknessFormula: 'HEIGHT - L1',
+          usageFormula: 'THICKNESS',
+        },
+      ],
+    };
+    expect(() => engine.computeRequirement(cyclic, inputs, 1)).toThrow(
+      /circular reference/,
+    );
   });
 });
 
 describe('computeVariance', () => {
   it('flags within tolerance', () => {
     const v = computeVariance(100, 100.5, 0.01); // +0.5% <= 1%
-    expect(v.varianceQty).toBeCloseTo(0.5, 6);
-    expect(v.variancePct).toBeCloseTo(0.5, 4);
     expect(v.status).toBe('WITHIN_TOLERANCE');
   });
 

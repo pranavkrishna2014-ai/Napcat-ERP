@@ -18,15 +18,28 @@ export interface LayerDefinition {
   /** Human-facing material name, for readable requirement output. */
   materialName?: string;
   uomCode?: string;
-  /** Expression, e.g. "LENGTH * WIDTH * THICKNESS / 1728". */
-  formula: string;
   /**
-   * Optional fixed thickness (inches). When present it is exposed to later
-   * layers as `LAYER{sequence}_THICKNESS` so height-remainder formulas work,
-   * and as the local variable `THICKNESS` within this layer's own formula.
+   * Stable variable name for this layer's thickness (e.g. "L1"). Other layers'
+   * `thicknessFormula`s reference it by this name — mirroring the Excel sheets'
+   * E-column row references (E4, E5, ...). Optional for layers whose thickness
+   * is never referenced.
    */
-  fixedThickness?: number | null;
-  /** Wastage fraction, 0.05 = +5%. */
+  layerKey?: string;
+  /**
+   * The layer's thickness expression (Excel "USAGE"/E column). May be a
+   * constant ("2"), the full height ("HEIGHT"), or a remainder that references
+   * other layers by their `layerKey` ("HEIGHT - L1 - L2"). Resolved before
+   * usage. `null` for fabrics / fixed-count layers that have no thickness.
+   */
+  thicknessFormula?: string | null;
+  /**
+   * Per-unit usage expression (Excel "PER UNIT"/G column). May reference
+   * dimensions (LENGTH, WIDTH, HEIGHT, BORDER_WIDTH), this layer's resolved
+   * `THICKNESS`, and any layer's thickness by `layerKey`.
+   * e.g. "LENGTH * WIDTH * THICKNESS / 1728".
+   */
+  usageFormula: string;
+  /** Wastage fraction, 0.05 = +5%. Defaults to 0 (Excel applies none). */
   wastageRate?: number;
   /** Tolerance fraction for variance exceptions, 0.01 = +/-1%. */
   toleranceRate?: number;
@@ -50,7 +63,10 @@ export interface LayerResult {
   materialId: string;
   materialName?: string;
   uomCode?: string;
+  /** The usage formula that was evaluated (kept for traceability/audit). */
   formula: string;
+  /** Resolved thickness for this layer, or null if it has none. */
+  resolvedThickness: number | null;
   /** Raw formula result before wastage, per single mattress. */
   baseQtyPerUnit: number;
   wastageRate: number;

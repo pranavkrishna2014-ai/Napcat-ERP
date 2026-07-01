@@ -366,8 +366,10 @@ model TemplateVariable {
   @@map("template_variables")
 }
 
-/// A single material layer within a template. The `formula` is a string
-/// expression evaluated by the Formula Engine at production time.
+/// A single material layer within a template, mirroring one row of the Excel
+/// Data sheet's WORKINGS table. The Formula Engine resolves `thicknessFormula`
+/// (the "USAGE"/E column) then evaluates `usageFormula` (the "PER UNIT"/G
+/// column) at production time. Nothing here stores a fixed consumption value.
 model TemplateLayer {
   id             String   @id @default(uuid())
   templateId     String
@@ -377,11 +379,14 @@ model TemplateLayer {
   material       Material @relation(fields: [materialId], references: [id])
   uomId          String
   uom            UnitOfMeasure @relation(fields: [uomId], references: [id])
-  /// Formula expression, e.g. "LENGTH * WIDTH * THICKNESS / 1728".
-  formula        String
-  /// Optional fixed thickness (inches) for this layer; exposed to later layers
-  /// as a variable so height-remainder formulas work.
-  fixedThickness Decimal? @db.Decimal(10, 4)
+  /// Stable variable name for this layer's thickness (e.g. "L1"). Other layers'
+  /// thickness formulas reference it by this name (mirrors Excel E-column refs).
+  layerKey       String?
+  /// Thickness expression: a constant ("2"), "HEIGHT", or a remainder that
+  /// references other layers ("HEIGHT - L1 - L2"). Null for fabrics / counts.
+  thicknessFormula String?
+  /// Per-unit usage expression, e.g. "LENGTH * WIDTH * THICKNESS / 1728".
+  usageFormula   String
   /// Extra consumption to allow for wastage, expressed as a fraction (0.05 = 5%).
   wastageRate    Decimal  @default(0) @db.Decimal(6, 4)
   /// Acceptable +/- variance fraction before an exception is raised.
@@ -390,6 +395,7 @@ model TemplateLayer {
   notes          String?
 
   @@unique([templateId, sequence])
+  @@unique([templateId, layerKey])
   @@index([materialId])
   @@map("template_layers")
 }

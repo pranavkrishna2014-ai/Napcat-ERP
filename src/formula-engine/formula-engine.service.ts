@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { evaluateFormula } from './evaluator';
+import { evaluateFormula, extractVariables } from './evaluator';
 import {
   FormulaError,
   FormulaScope,
@@ -15,16 +15,25 @@ import {
  *
  * Given a production template (a versioned set of material layers with
  * formulas) and the order dimensions/quantity, it computes the standard
- * material requirement dynamically — reproducing the factory's Excel math
+ * material requirement dynamically — reproducing the factory's Excel workbooks
  * without ever storing fixed consumption values.
  *
- * Layer-thickness chaining: each layer with a `fixedThickness` publishes two
- * variables usable by *later* layers' formulas:
- *   - LAYER{sequence}_THICKNESS   (e.g. LAYER1_THICKNESS)
- * and, within its own formula, the convenience alias `THICKNESS`.
- * This is what makes height-remainder formulas such as
- *   "LENGTH * WIDTH * (OVERALL_HEIGHT - LAYER1_THICKNESS - LAYER2_THICKNESS) / 1728"
- * work exactly as they do in the spreadsheets.
+ * It mirrors the spreadsheet exactly with a two-phase evaluation, matching the
+ * Data-sheet columns:
+ *
+ *   Phase 1 — Thickness (Excel "USAGE" / E column):
+ *     Each layer's `thicknessFormula` is resolved. It may be a constant, the
+ *     full HEIGHT, or a remainder that references *other* layers' thickness by
+ *     their `layerKey` (e.g. "HEIGHT - L1 - L6"). References may point to
+ *     layers listed later, so resolution is dependency-ordered (iterative
+ *     fixpoint), exactly as Excel resolves inter-cell references.
+ *
+ *   Phase 2 — Usage per unit (Excel "PER UNIT" / G column):
+ *     Each layer's `usageFormula` is evaluated with the dimensions, this
+ *     layer's resolved `THICKNESS`, and every layer's thickness by `layerKey`.
+ *
+ *   Final usage (Excel "Final Usage" / H column) = per-unit * order quantity,
+ *   with optional wastage applied on top (Excel applies none by default).
  */
 @Injectable()
 export class FormulaEngineService {
@@ -32,7 +41,8 @@ export class FormulaEngineService {
    * Compute the full requirement for a production order.
    *
    * @param template  Versioned production template with ordered layers.
-   * @param inputs    Dimension/other variables (LENGTH, WIDTH, OVERALL_HEIGHT...).
+   * @param inputs    Dimension/other variables: LENGTH, WIDTH, HEIGHT,
+   *                  BORDER_WIDTH, ... (upper-cased internally).
    * @param orderQuantity Number of mattresses on the production order.
    */
   computeRequirement(
@@ -46,29 +56,27 @@ export class FormulaEngineService {
       );
     }
 
-    // Base scope: template constants first, then caller inputs (inputs win),
-    // then derived values we inject below.
+    // Base scope: template constants first, then caller inputs (inputs win).
     const scope: FormulaScope = {
       ...(template.variables ?? {}),
       ...normalizeKeys(inputs),
     };
-
-    if (template.overallHeight != null && scope.OVERALL_HEIGHT == null) {
-      scope.OVERALL_HEIGHT = template.overallHeight;
+    if (template.overallHeight != null && scope.HEIGHT == null) {
+      scope.HEIGHT = template.overallHeight;
     }
 
     const layers = [...template.layers].sort((a, b) => a.sequence - b.sequence);
-    const layerResults: LayerResult[] = [];
 
-    for (const layer of layers) {
-      const result = this.evaluateLayer(layer, scope);
-      layerResults.push(result);
-
-      // Publish this layer's thickness to subsequent layers.
-      if (layer.fixedThickness != null) {
-        scope[`LAYER${layer.sequence}_THICKNESS`] = layer.fixedThickness;
-      }
+    // --- Phase 1: resolve every layer's thickness -----------------------------
+    const thicknesses = this.resolveThicknesses(layers, scope);
+    for (const [key, value] of Object.entries(thicknesses)) {
+      scope[key] = value;
     }
+
+    // --- Phase 2: evaluate per-unit usage for each layer ----------------------
+    const layerResults: LayerResult[] = layers.map((layer) =>
+      this.evaluateUsage(layer, scope, thicknesses),
+    );
 
     const materialTotals = this.consolidate(layerResults, orderQuantity);
 
@@ -82,32 +90,110 @@ export class FormulaEngineService {
     };
   }
 
-  private evaluateLayer(
+  /**
+   * Resolve each layer's thickness, honouring cross-layer references in any
+   * order via an iterative fixpoint. Returns a map of `layerKey` -> thickness.
+   * Layers without a `thicknessFormula` contribute nothing.
+   */
+  private resolveThicknesses(
+    layers: LayerDefinition[],
+    scope: FormulaScope,
+  ): Record<string, number> {
+    const layerKeys = new Set(
+      layers.map((l) => l.layerKey).filter((k): k is string => !!k),
+    );
+
+    const resolved: Record<string, number> = {};
+    const pending = layers.filter((l) => l.thicknessFormula != null);
+
+    let progress = true;
+    while (pending.length > 0 && progress) {
+      progress = false;
+
+      for (let i = pending.length - 1; i >= 0; i--) {
+        const layer = pending[i];
+        const formula = layer.thicknessFormula as string;
+
+        // Only evaluate once every referenced *layer* dependency is known.
+        const deps = extractVariables(formula).filter((v) => layerKeys.has(v));
+        const ready = deps.every((d) => d in resolved);
+        if (!ready) continue;
+
+        let value: number;
+        try {
+          value = evaluateFormula(formula, { ...scope, ...resolved });
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err);
+          throw new FormulaError(
+            `Layer ${layer.sequence} (${layer.materialName ?? layer.materialId}) thickness: ${detail}`,
+            formula,
+          );
+        }
+
+        if (value < 0) {
+          throw new FormulaError(
+            `Layer ${layer.sequence} (${layer.materialName ?? layer.materialId}) ` +
+              `resolved to a negative thickness (${value}). Check HEIGHT and layer thicknesses.`,
+            formula,
+          );
+        }
+
+        if (layer.layerKey) {
+          resolved[layer.layerKey] = value;
+        } else {
+          // No key: still record under a private handle so evaluateUsage can
+          // find THICKNESS; use the layer id to avoid clashes.
+          resolved[`__seq${layer.sequence}`] = value;
+        }
+        pending.splice(i, 1);
+        progress = true;
+      }
+    }
+
+    if (pending.length > 0) {
+      const names = pending
+        .map((l) => `${l.layerKey ?? 'L' + l.sequence}`)
+        .join(', ');
+      throw new FormulaError(
+        `Could not resolve layer thicknesses (unresolvable or circular reference): ${names}`,
+      );
+    }
+
+    return resolved;
+  }
+
+  private evaluateUsage(
     layer: LayerDefinition,
     scope: FormulaScope,
+    thicknesses: Record<string, number>,
   ): LayerResult {
-    // Expose the layer's own fixed thickness as `THICKNESS` inside its formula.
-    const layerScope: FormulaScope = { ...scope };
-    if (layer.fixedThickness != null) {
-      layerScope.THICKNESS = layer.fixedThickness;
+    let resolvedThickness: number | null = null;
+    if (layer.thicknessFormula != null) {
+      resolvedThickness = layer.layerKey
+        ? thicknesses[layer.layerKey]
+        : thicknesses[`__seq${layer.sequence}`];
+    }
+
+    const usageScope: FormulaScope = { ...scope };
+    if (resolvedThickness != null) {
+      usageScope.THICKNESS = resolvedThickness;
     }
 
     let baseQtyPerUnit: number;
     try {
-      baseQtyPerUnit = evaluateFormula(layer.formula, layerScope);
+      baseQtyPerUnit = evaluateFormula(layer.usageFormula, usageScope);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       throw new FormulaError(
-        `Layer ${layer.sequence} (${layer.materialName ?? layer.materialId}): ${detail}`,
-        layer.formula,
+        `Layer ${layer.sequence} (${layer.materialName ?? layer.materialId}) usage: ${detail}`,
+        layer.usageFormula,
       );
     }
 
     if (baseQtyPerUnit < 0) {
       throw new FormulaError(
-        `Layer ${layer.sequence} produced a negative quantity (${baseQtyPerUnit}). ` +
-          `Check thickness/height inputs.`,
-        layer.formula,
+        `Layer ${layer.sequence} produced a negative quantity (${baseQtyPerUnit}).`,
+        layer.usageFormula,
       );
     }
 
@@ -121,7 +207,9 @@ export class FormulaEngineService {
       materialId: layer.materialId,
       materialName: layer.materialName,
       uomCode: layer.uomCode,
-      formula: layer.formula,
+      formula: layer.usageFormula,
+      resolvedThickness:
+        resolvedThickness == null ? null : round6(resolvedThickness),
       baseQtyPerUnit: round6(baseQtyPerUnit),
       wastageRate,
       toleranceRate,

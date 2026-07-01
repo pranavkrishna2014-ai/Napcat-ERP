@@ -1,159 +1,186 @@
 /**
- * Seed script — demonstrates the end-to-end setup for ONE mattress model using
- * the Formula Engine, mirroring the three-layer example in the master spec.
+ * Seed script — loads the full model catalog extracted from the factory Excel
+ * workbooks (prisma/data/model-catalog.json) into the database:
+ *   units of measure, material categories & materials, the Napcat brand,
+ *   every mattress model + a default variant, and an ACTIVE, formula-driven
+ *   ProductionTemplate (version 1) with its layers.
  *
  * Run with: npm run db:seed  (requires a generated Prisma client + database).
  *
- * This is intentionally small; it exists to prove the data model and formula
- * flow, not to load the full catalogue. Real model formulas will be imported
- * from the factory's Excel workbooks once available.
+ * Re-runnable: brands/models/materials are upserted by their unique codes/names.
  */
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+interface CatalogLayer {
+  key: string;
+  material: string;
+  uom: string;
+  thickness: string | null;
+  usage: string;
+  expectedPerUnit: number;
+  contingentEligible?: boolean;
+}
+interface CatalogModel {
+  brand: string;
+  code: string;
+  name: string;
+  sampleInputs: Record<string, number>;
+  layers: CatalogLayer[];
+}
+interface Catalog {
+  units: Record<string, string>;
+  models: CatalogModel[];
+}
+
+/** Infer a material category from its name. */
+function categoryFor(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('fabric')) return 'Fabric';
+  if (n.includes('spring')) return 'Spring';
+  if (n.includes('coir')) return 'Coir';
+  if (n.includes('latex')) return 'Latex';
+  if (n.includes('memory')) return 'Foam';
+  if (n.includes('foam') || n.includes('pu')) return 'Foam';
+  return 'Other';
+}
+
 async function main(): Promise<void> {
+  const catalog = JSON.parse(
+    fs.readFileSync(
+      path.join(__dirname, 'data', 'model-catalog.json'),
+      'utf8',
+    ),
+  ) as Catalog;
+
   // --- Units of measure -----------------------------------------------------
-  const cf = await prisma.unitOfMeasure.upsert({
-    where: { code: 'CF' },
-    update: {},
-    create: { code: 'CF', name: 'Cubic Feet' },
-  });
+  const uomByCode = new Map<string, string>();
+  for (const [code, name] of Object.entries(catalog.units)) {
+    const uom = await prisma.unitOfMeasure.upsert({
+      where: { code },
+      update: {},
+      create: { code, name },
+    });
+    uomByCode.set(code, uom.id);
+  }
 
-  // --- Material categories & materials --------------------------------------
-  const foamCat = await prisma.materialCategory.upsert({
-    where: { name: 'Foam' },
-    update: {},
-    create: { name: 'Foam' },
-  });
-  const latexCat = await prisma.materialCategory.upsert({
-    where: { name: 'Latex' },
-    update: {},
-    create: { name: 'Latex' },
-  });
+  // --- Categories & materials (deduped by name across all models) -----------
+  const categoryByName = new Map<string, string>();
+  const materialByName = new Map<string, string>();
 
-  const superSoft = await prisma.material.upsert({
-    where: { code: 'FOAM-32D-SS' },
-    update: {},
-    create: {
-      code: 'FOAM-32D-SS',
-      name: '32D Super Soft Foam',
-      categoryId: foamCat.id,
-      uomId: cf.id,
-      density: 32,
-      isContingentEligible: true,
-    },
-  });
-  const latex = await prisma.material.upsert({
-    where: { code: 'LATEX-STD' },
-    update: {},
-    create: {
-      code: 'LATEX-STD',
-      name: 'Latex',
-      categoryId: latexCat.id,
-      uomId: cf.id,
-      isContingentEligible: true,
-    },
-  });
-  const hrFoam = await prisma.material.upsert({
-    where: { code: 'FOAM-HR' },
-    update: {},
-    create: {
-      code: 'FOAM-HR',
-      name: 'HR Foam',
-      categoryId: foamCat.id,
-      uomId: cf.id,
-    },
-  });
+  async function ensureCategory(name: string): Promise<string> {
+    if (categoryByName.has(name)) return categoryByName.get(name)!;
+    const cat = await prisma.materialCategory.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+    categoryByName.set(name, cat.id);
+    return cat.id;
+  }
 
-  // --- Warranty policy ------------------------------------------------------
-  const policy = await prisma.warrantyPolicy.upsert({
-    where: { name: 'Standard 10 Year' },
-    update: {},
-    create: { name: 'Standard 10 Year', durationMonths: 120, fullCoverMonths: 12 },
-  });
+  async function ensureMaterial(name: string, uomCode: string): Promise<string> {
+    if (materialByName.has(name)) return materialByName.get(name)!;
+    const categoryId = await ensureCategory(categoryFor(name));
+    const code = name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    const mat = await prisma.material.upsert({
+      where: { code },
+      update: {},
+      create: {
+        code,
+        name,
+        categoryId,
+        uomId: uomByCode.get(uomCode)!,
+        isContingentEligible: false,
+      },
+    });
+    materialByName.set(name, mat.id);
+    return mat.id;
+  }
 
-  // --- Brand / model / variant ----------------------------------------------
+  // --- Brand ----------------------------------------------------------------
   const brand = await prisma.brand.upsert({
     where: { code: 'NAP' },
     update: {},
     create: { code: 'NAP', name: 'Napcat' },
   });
-  const model = await prisma.mattressModel.upsert({
-    where: { code: 'ORTHO-LUX' },
-    update: {},
-    create: {
-      code: 'ORTHO-LUX',
-      name: 'Ortho Lux',
-      brandId: brand.id,
-      warrantyPolicyId: policy.id,
-    },
-  });
-  const variant = await prisma.modelVariant.upsert({
-    where: { code: 'ORTHO-LUX-Q' },
-    update: {},
-    create: {
-      code: 'ORTHO-LUX-Q',
-      name: 'Ortho Lux Queen 72x60x8',
-      modelId: model.id,
-      defaultLength: 72,
-      defaultWidth: 60,
-      defaultHeight: 8,
-    },
-  });
 
-  // --- Production template with formula-driven layers ------------------------
-  const template = await prisma.productionTemplate.create({
-    data: {
-      variantId: variant.id,
-      version: 1,
-      status: 'ACTIVE',
-      overallHeight: 8,
-      activatedAt: new Date(),
-      variables: {
-        create: [
-          { key: 'LENGTH', label: 'Length (in)', defaultValue: 72 },
-          { key: 'WIDTH', label: 'Width (in)', defaultValue: 60 },
-          { key: 'OVERALL_HEIGHT', label: 'Overall Height (in)', defaultValue: 8 },
-        ],
-      },
-      layers: {
-        create: [
-          {
-            sequence: 1,
-            materialId: superSoft.id,
-            uomId: cf.id,
-            formula: 'LENGTH * WIDTH * THICKNESS / 1728',
-            fixedThickness: 2,
-            wastageRate: 0,
-            toleranceRate: 0.01,
-            isContingentEligible: true,
-          },
-          {
-            sequence: 2,
-            materialId: latex.id,
-            uomId: cf.id,
-            formula: 'LENGTH * WIDTH * THICKNESS / 1728',
-            fixedThickness: 1,
-            wastageRate: 0,
-            toleranceRate: 0.01,
-            isContingentEligible: true,
-          },
-          {
-            sequence: 3,
-            materialId: hrFoam.id,
-            uomId: cf.id,
-            formula:
-              'LENGTH * WIDTH * (OVERALL_HEIGHT - LAYER1_THICKNESS - LAYER2_THICKNESS) / 1728',
-            wastageRate: 0.05,
-            toleranceRate: 0.01,
-          },
-        ],
-      },
-    },
-  });
+  // --- Models, variants and formula-driven templates ------------------------
+  let created = 0;
+  for (const m of catalog.models) {
+    const model = await prisma.mattressModel.upsert({
+      where: { code: m.code },
+      update: {},
+      create: { code: m.code, name: m.name, brandId: brand.id },
+    });
 
-  console.log(`Seeded template ${template.id} for variant ${variant.code}`);
+    const variantCode = `${m.code}-STD`;
+    const variant = await prisma.modelVariant.upsert({
+      where: { code: variantCode },
+      update: {},
+      create: {
+        code: variantCode,
+        name: `${m.name} (standard)`,
+        modelId: model.id,
+        defaultLength: m.sampleInputs.LENGTH,
+        defaultWidth: m.sampleInputs.WIDTH,
+        defaultHeight: m.sampleInputs.HEIGHT,
+      },
+    });
+
+    // Skip if this variant already has a template (keeps the seed idempotent).
+    const existing = await prisma.productionTemplate.findFirst({
+      where: { variantId: variant.id, version: 1 },
+    });
+    if (existing) continue;
+
+    // Resolve material ids for all layers first.
+    const layerData = [];
+    for (let i = 0; i < m.layers.length; i++) {
+      const l = m.layers[i];
+      const materialId = await ensureMaterial(l.material, l.uom);
+      layerData.push({
+        sequence: i + 1,
+        materialId,
+        uomId: uomByCode.get(l.uom)!,
+        layerKey: l.key,
+        thicknessFormula: l.thickness,
+        usageFormula: l.usage,
+        isContingentEligible: l.contingentEligible ?? false,
+      });
+    }
+
+    await prisma.productionTemplate.create({
+      data: {
+        variantId: variant.id,
+        version: 1,
+        status: 'ACTIVE',
+        overallHeight: m.sampleInputs.HEIGHT,
+        activatedAt: new Date(),
+        variables: {
+          create: [
+            { key: 'LENGTH', label: 'Length (in)', defaultValue: m.sampleInputs.LENGTH },
+            { key: 'WIDTH', label: 'Breadth (in)', defaultValue: m.sampleInputs.WIDTH },
+            { key: 'HEIGHT', label: 'Height (in)', defaultValue: m.sampleInputs.HEIGHT },
+            { key: 'BORDER_WIDTH', label: 'Border fabric width (in)', defaultValue: m.sampleInputs.BORDER_WIDTH },
+          ],
+        },
+        layers: { create: layerData },
+      },
+    });
+    created++;
+  }
+
+  console.log(
+    `Seed complete: brand ${brand.name}, ${catalog.models.length} models ` +
+      `(${created} templates created), ${materialByName.size} materials.`,
+  );
 }
 
 main()
