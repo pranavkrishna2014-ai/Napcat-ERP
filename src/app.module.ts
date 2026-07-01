@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { FormulaEngineModule } from './formula-engine/formula-engine.module';
 import { MasterDataModule } from './modules/master-data/master-data.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 
 /**
  * Root module. Cross-cutting concerns are registered globally:
@@ -29,6 +30,7 @@ import { MasterDataModule } from './modules/master-data/master-data.module';
     AuthModule,
     FormulaEngineModule,
     MasterDataModule,
+    InventoryModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

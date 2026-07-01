@@ -68,6 +68,43 @@ curl -X POST http://localhost:3000/api/materials/import \
 # → { "created": 1 }
 ```
 
+## Inventory (Phase 2)
+
+Every stock change flows through one transactional choke point that appends an
+immutable ledger row (with running balance) and updates the derived
+`StockBalance` cache. Decrements are blocked from going negative — only an
+authorized ADMIN adjustment may.
+
+| Method | Route                              | Access              | Purpose                              |
+| ------ | ---------------------------------- | ------------------- | ------------------------------------ |
+| GET    | `/inventory/balances`              | any                 | Balances — `?materialId&warehouseId&inventoryType` |
+| GET    | `/inventory/balances/by-code/:code`| any                 | Barcode/QR lookup by material code   |
+| GET    | `/inventory/ledger`                | any                 | Ledger history (filter + paginate)   |
+| GET    | `/inventory/reconcile`             | ADMIN               | Recompute from ledger; report drift  |
+| POST   | `/inventory/receipts`              | ADMIN/PLANNER/STORE | Goods in (`opening:true` for opening balance) |
+| POST   | `/inventory/issues`                | ADMIN/PLANNER/STORE | Issue to a production order           |
+| POST   | `/inventory/returns`               | ADMIN/PLANNER/STORE | Return unused material               |
+| POST   | `/inventory/transfers`             | ADMIN/PLANNER/STORE | Warehouse-to-warehouse (out + in)    |
+| POST   | `/inventory/scrap`                 | ADMIN/PLANNER/STORE | Move to scrap inventory              |
+| POST   | `/inventory/contingent/recover`    | ADMIN/PLANNER/STORE | Recover foam/latex to contingent     |
+| POST   | `/inventory/contingent/consume`    | ADMIN/PLANNER/STORE | Consume contingent stock             |
+| POST   | `/inventory/adjustments`           | ADMIN               | Authorized correction (signed `delta` + `reason`) |
+
+`inventoryType` ∈ `RAW_MATERIAL`, `SEMI_FINISHED`, `FINISHED_GOOD`,
+`CONTINGENT`, `SCRAP`. Contingent and scrap never mix with normal stock.
+
+```bash
+# Receive 100 CFT of a material
+curl -X POST http://localhost:3000/api/inventory/receipts \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"materialId":"…","warehouseId":"…","inventoryType":"RAW_MATERIAL","quantity":100}'
+
+# Authorized correction (ADMIN): reduce by 2 with a reason
+curl -X POST http://localhost:3000/api/inventory/adjustments \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"materialId":"…","warehouseId":"…","inventoryType":"RAW_MATERIAL","delta":-2,"reason":"cycle count"}'
+```
+
 ## Audit
 
 Every successful `POST/PUT/PATCH/DELETE` writes an `AuditLog` row: user, action,

@@ -28,12 +28,19 @@ serial traceability, audit trail, automation over typing).
 - [x] Global JWT auth + roles guards + validation pipe; seed creates roles and
       an initial admin user
 
-## Phase 2 — Inventory core
+## Phase 2 — Inventory core ✅
 
-- [ ] Inventory ledger service (append-only) + derived balance reconciliation
-- [ ] Receipts, transfers, adjustments (authorized), scrap
-- [ ] Contingent inventory lifecycle (recovery, consumption, balance, ledger)
-- [ ] Barcode/QR-ready stock lookups
+- [x] Inventory ledger service (append-only) + derived balance reconciliation
+      (`reconcileAll` recomputes balances purely from the ledger)
+- [x] Single choke point `postMovement` (transactional: ledger row + balance
+      upsert, negative-stock guard); receipts, issues, returns, transfers,
+      scrap
+- [x] Authorized adjustments (ADMIN-only, mandatory reason, may go negative)
+- [x] Contingent inventory lifecycle (recovery, consumption, balance, ledger) —
+      kept separate from normal stock by inventory type
+- [x] Barcode/QR-ready stock lookups (balances by material code) + ledger
+      history queries
+- [x] Pure `inventory-math` (signs, balance guard, reconciliation) unit-tested
 
 ## Phase 3 — Formula-driven production
 

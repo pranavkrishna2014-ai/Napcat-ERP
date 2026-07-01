@@ -127,6 +127,10 @@ npm run start:dev
   (ADMIN/PLANNER/STORE/OPERATOR/QC), CRUD + search/pagination + bulk Excel
   import for all core reference entities, and a global audit-log interceptor.
   See [`docs/API.md`](docs/API.md).
+- **Phase 2 — inventory core**: append-only inventory ledger as the single
+  source of truth (one transactional choke point), derived balances with
+  ledger reconciliation, receipts/issues/returns/transfers/scrap, the
+  contingent lifecycle, authorized adjustments, and barcode/QR-ready lookups.
 
 Feature modules (Inventory, Production, Dispatch, Warranty, …) build on this
 base — each adhering to the principles above. See
