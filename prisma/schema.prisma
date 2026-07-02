@@ -620,6 +620,7 @@ model MaterialReservation {
   status        ReservationStatus @default(RESERVED)
   createdAt     DateTime @default(now())
 
+  @@unique([productionOrderId, materialId])
   @@index([productionOrderId])
   @@index([materialId])
   @@map("material_reservations")

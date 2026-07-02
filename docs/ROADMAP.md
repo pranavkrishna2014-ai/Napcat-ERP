@@ -42,12 +42,18 @@ serial traceability, audit trail, automation over typing).
       history queries
 - [x] Pure `inventory-math` (signs, balance guard, reconciliation) unit-tested
 
-## Phase 3 — Formula-driven production
+## Phase 3 — Formula-driven production ✅
 
-- [ ] Production Template management + formula versioning UI/API
-- [ ] Sales Order → approval → material availability check
-- [ ] Production Order generation → Formula Engine → MaterialRequirement
-- [ ] Reservation → issue → actual consumption → variance analysis
+- [x] Production Template management + formula versioning API (DRAFT → ACTIVE
+      archives prior version) + Formula Engine preview
+- [x] Sales Order → submit → approval; approval auto-generates a production
+      order per line via the variant's ACTIVE template
+- [x] Production Order generation → Formula Engine → persisted
+      MaterialRequirement (with formula snapshot); material availability check
+      against the inventory ledger
+- [x] Reservation → issue (through the inventory ledger) → actual consumption →
+      variance analysis; contingent recovery / scrap posted on consumption
+- [x] Domain integration test of the whole pipeline (no DB)
 
 ## Phase 4 — Manufacturing operations
 

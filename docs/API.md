@@ -105,6 +105,50 @@ curl -X POST http://localhost:3000/api/inventory/adjustments \
   -d '{"materialId":"…","warehouseId":"…","inventoryType":"RAW_MATERIAL","delta":-2,"reason":"cycle count"}'
 ```
 
+## Formula-driven production (Phase 3)
+
+The automated chain: **Sales Order → approval → production orders → Formula
+Engine → material requirement → availability → reserve → issue → consumption →
+variance.**
+
+### Production templates (versioned, formula-driven)
+
+| Method | Route                              | Access         | Purpose                                  |
+| ------ | ---------------------------------- | -------------- | ---------------------------------------- |
+| GET    | `/production-templates?variantId=` | any            | List versions for a variant              |
+| GET    | `/production-templates/:id`        | any            | Fetch (layers + variables)               |
+| POST   | `/production-templates`            | ADMIN/PLANNER  | Create next DRAFT version                 |
+| POST   | `/production-templates/:id/activate` | ADMIN/PLANNER | Activate (archives prior ACTIVE version) |
+| POST   | `/production-templates/:id/preview` | ADMIN/PLANNER | Dry-run the Formula Engine (`{inputs, quantity}`) |
+
+### Sales orders
+
+| Method | Route                     | Access         | Purpose                                    |
+| ------ | ------------------------- | -------------- | ------------------------------------------ |
+| POST   | `/sales-orders`           | ADMIN/PLANNER  | Create (with lines)                        |
+| GET    | `/sales-orders/:id`       | any            | Fetch                                      |
+| POST   | `/sales-orders/:id/submit`| ADMIN/PLANNER  | DRAFT → PENDING_APPROVAL                    |
+| POST   | `/sales-orders/:id/approve`| ADMIN/PLANNER | Approve → **auto-generate production orders** |
+| POST   | `/sales-orders/:id/reject`| ADMIN/PLANNER  | Reject                                     |
+
+### Production orders
+
+| Method | Route                               | Access              | Purpose                                   |
+| ------ | ----------------------------------- | ------------------- | ----------------------------------------- |
+| POST   | `/production-orders`                 | ADMIN/PLANNER       | Create + compute & persist requirement    |
+| GET    | `/production-orders/:id`             | any                 | Fetch (requirements, reservations, etc.)  |
+| GET    | `/production-orders/:id/availability`| any                 | Standard vs available stock (shortfalls)  |
+| POST   | `/production-orders/:id/reserve`     | ADMIN/PLANNER/STORE | Reserve standard requirement              |
+| POST   | `/production-orders/:id/issue`       | ADMIN/PLANNER/STORE | Issue material via the inventory ledger   |
+| POST   | `/production-orders/:id/consumption` | ADMIN/PLANNER/OPERATOR | Record actual usage → compute variance |
+| GET    | `/production-orders/:id/variances`   | any                 | Variance (WITHIN_TOLERANCE / EXCEPTION)   |
+| POST   | `/production-orders/:id/complete`    | ADMIN/PLANNER       | Mark completed                            |
+
+Material requirement is **computed dynamically** by the Formula Engine at order
+time (never a stored fixed quantity); the evaluated formulas are snapshotted per
+material for audit. Issues flow through the same inventory choke point as Phase
+2, so every production movement is a traceable ledger entry.
+
 ## Audit
 
 Every successful `POST/PUT/PATCH/DELETE` writes an `AuditLog` row: user, action,

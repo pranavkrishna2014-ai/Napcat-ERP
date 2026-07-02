@@ -131,6 +131,10 @@ npm run start:dev
   source of truth (one transactional choke point), derived balances with
   ledger reconciliation, receipts/issues/returns/transfers/scrap, the
   contingent lifecycle, authorized adjustments, and barcode/QR-ready lookups.
+- **Phase 3 — formula-driven production**: versioned production templates,
+  sales orders that auto-generate production orders on approval, dynamic
+  material requirement via the Formula Engine, availability checks against the
+  ledger, reservation, issue, actual-consumption entry, and variance analysis.
 
 Feature modules (Inventory, Production, Dispatch, Warranty, …) build on this
 base — each adhering to the principles above. See
