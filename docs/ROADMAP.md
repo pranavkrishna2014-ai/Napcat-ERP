@@ -67,22 +67,28 @@ serial traceability, audit trail, automation over typing).
 - [x] Quality control workflow (submit → PASS/FAIL/REWORK; completion gated on
       a QC pass)
 
-## Phase 5 — Dispatch & Tally sync
+## Phase 5 — Dispatch & Tally sync ✅
 
-- [ ] Dispatch planning + dispatch ledger movements
-- [ ] Tally invoice import (invoice no/date/dealer/customer/serials/qty)
-- [ ] Dispatch reconciliation against imported invoices
+- [x] Dispatch planning; dispatching issues each serial out of FINISHED_GOOD
+      inventory through the ledger and links serials to dispatch lines
+- [x] Tally invoice import (invoice no/date/dealer/customer/serials) — the only
+      data crossing from Tally; no amounts, no GST, no ledgers
+- [x] Dispatch reconciliation (dispatched vs invoiced serials, pure + tested)
 
-## Phase 6 — Warranty
+## Phase 6 — Warranty ✅
 
-- [ ] Warranty activation on invoice sync (start = invoice date)
-- [ ] Expiry from model policy; claim intake, validation, replacement history
+- [x] Warranty activation on invoice sync (start = invoice date), triggered by
+      the Tally import
+- [x] Expiry from model policy (pure month-arithmetic with clamping); claim
+      intake with full validation and replacement history
 
-## Phase 7 — Reporting & dashboards
+## Phase 7 — Reporting & dashboards ✅
 
-- [ ] Variance dashboard (exceptions-first)
-- [ ] Inventory, contingent, production, warranty dashboards
-- [ ] Management views surfacing exceptions, not raw data
+- [x] Variance dashboard (exceptions-first)
+- [x] Low stock, pending QC, contingent balances, expiring warranties, open
+      claims, dispatch reconciliation
+- [x] `/dashboard/summary` — one-glance management view surfacing only what
+      needs attention (`allClear` flag)
 
 ## Cross-cutting (ongoing)
 

@@ -184,6 +184,44 @@ one `FinishedGood` each, and posts a `PRODUCTION_OUTPUT` movement into
 Both job-work legs are ordinary traceable ledger movements: issue consumes raw
 material; receipt posts the component into `SEMI_FINISHED`.
 
+## Dispatch & Tally sync (Phase 5)
+
+| Method | Route                     | Access              | Purpose                                   |
+| ------ | ------------------------- | ------------------- | ----------------------------------------- |
+| POST   | `/dispatch`               | ADMIN/PLANNER/STORE | Create a dispatch plan (lines of serials) |
+| POST   | `/dispatch/:id/dispatch`  | ADMIN/PLANNER/STORE | Issue serials out of finished goods (`{warehouseId}`) |
+| GET    | `/dispatch/:id`           | any                 | Fetch a plan                              |
+| GET    | `/dispatch`               | any                 | List (`?status`)                          |
+| GET    | `/dispatch/reconcile`     | any                 | Dispatched vs invoiced serials            |
+| POST   | `/tally/invoices`         | ADMIN/PLANNER       | **Import a Tally invoice** → activates warranties |
+
+The Tally import is the only inbound data from accounting — invoice number,
+date, dealer, customer name and serials sold. **No amounts, GST or ledgers.**
+
+## Warranty & claims (Phase 6)
+
+| Method | Route                        | Access        | Purpose                                     |
+| ------ | ---------------------------- | ------------- | ------------------------------------------- |
+| GET    | `/warranties/:serial`        | any           | Warranty for a serial                       |
+| GET    | `/warranties/expiring?days=` | any           | Active warranties expiring soon             |
+| POST   | `/warranty-claims`           | ADMIN/PLANNER | File a claim (validated) — `{serial, reason, dealerId?}` |
+| POST   | `/warranty-claims/:id/decide`| ADMIN         | `APPROVED` / `REJECTED` / `REPLACED`        |
+| GET    | `/warranty-claims?status=`   | any           | List claims                                 |
+
+Warranty is **dormant at manufacture** and activates only on invoice sync:
+start = invoice date, expiry = model policy duration. Claims validate serial,
+activation, period, dealer and prior replacement before they open.
+
+## Dashboards (Phase 7)
+
+Read-only, exceptions-first. All under `/dashboard`:
+
+`summary` · `variance-exceptions` · `low-stock` · `pending-qc` · `contingent` ·
+`warranty-expiring?days=` · `open-claims` · `dispatch-reconciliation`
+
+`/dashboard/summary` returns counts of everything needing attention plus an
+`allClear` flag.
+
 ## Audit
 
 Every successful `POST/PUT/PATCH/DELETE` writes an `AuditLog` row: user, action,

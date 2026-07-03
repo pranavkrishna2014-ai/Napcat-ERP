@@ -14,6 +14,9 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { ProductionModule } from './modules/production/production.module';
 import { FinishedGoodsModule } from './modules/finished-goods/finished-goods.module';
 import { JobWorkModule } from './modules/job-work/job-work.module';
+import { WarrantyModule } from './modules/warranty/warranty.module';
+import { DispatchModule } from './modules/dispatch/dispatch.module';
+import { ReportingModule } from './modules/reporting/reporting.module';
 
 /**
  * Root module. Cross-cutting concerns are registered globally:
@@ -37,6 +40,9 @@ import { JobWorkModule } from './modules/job-work/job-work.module';
     ProductionModule,
     FinishedGoodsModule,
     JobWorkModule,
+    WarrantyModule,
+    DispatchModule,
+    ReportingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

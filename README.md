@@ -139,8 +139,14 @@ npm run start:dev
   completion that generates unique serial numbers and finished goods (posted to
   the ledger), MRP label payloads, end-to-end serial traceability, and foam
   cutting / quilting job-work.
+- **Phase 5 — dispatch & Tally sync**: dispatch planning that issues serials
+  out of finished goods, Tally invoice import (serials only — no accounting),
+  and dispatch-vs-invoice reconciliation.
+- **Phase 6 — warranty & claims**: warranty activation on invoice date, expiry
+  from the model policy, and validated claim intake with replacement history.
+- **Phase 7 — dashboards**: exceptions-first management views (variance, low
+  stock, pending QC, expiring warranties, open claims, reconciliation) and a
+  one-glance `/dashboard/summary`.
 
-Feature modules (Inventory, Production, Dispatch, Warranty, …) build on this
-base — each adhering to the principles above. See
-[`docs/ROADMAP.md`](docs/ROADMAP.md) and
-[`docs/FORMULA_ENGINE.md`](docs/FORMULA_ENGINE.md).
+All seven phases are complete. See [`docs/ROADMAP.md`](docs/ROADMAP.md),
+[`docs/API.md`](docs/API.md) and [`docs/FORMULA_ENGINE.md`](docs/FORMULA_ENGINE.md).
