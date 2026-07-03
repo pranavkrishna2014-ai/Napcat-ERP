@@ -55,11 +55,17 @@ serial traceability, audit trail, automation over typing).
       variance analysis; contingent recovery / scrap posted on consumption
 - [x] Domain integration test of the whole pipeline (no DB)
 
-## Phase 4 — Manufacturing operations
+## Phase 4 — Manufacturing operations ✅
 
-- [ ] Foam cutting & quilting job-work tracking
-- [ ] Finished goods + serial number generation & MRP label printing
-- [ ] Quality control workflow
+- [x] Foam cutting & quilting job-work tracking (issue → receive through the
+      ledger, offcuts to scrap) — new `JobWork` model
+- [x] Finished goods + unique serial number generation (BRAND-MODEL-YYMMDD-NNNN)
+      on QC-passed completion; batch creation; finished-goods output posted to
+      the ledger
+- [x] MRP label payload (size, warranty, scannable serial) per unit
+- [x] Serial traceability lookup (batch → PO → variant → warranty)
+- [x] Quality control workflow (submit → PASS/FAIL/REWORK; completion gated on
+      a QC pass)
 
 ## Phase 5 — Dispatch & Tally sync
 

@@ -12,6 +12,8 @@ import { FormulaEngineModule } from './formula-engine/formula-engine.module';
 import { MasterDataModule } from './modules/master-data/master-data.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { ProductionModule } from './modules/production/production.module';
+import { FinishedGoodsModule } from './modules/finished-goods/finished-goods.module';
+import { JobWorkModule } from './modules/job-work/job-work.module';
 
 /**
  * Root module. Cross-cutting concerns are registered globally:
@@ -33,6 +35,8 @@ import { ProductionModule } from './modules/production/production.module';
     MasterDataModule,
     InventoryModule,
     ProductionModule,
+    FinishedGoodsModule,
+    JobWorkModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -135,6 +135,10 @@ npm run start:dev
   sales orders that auto-generate production orders on approval, dynamic
   material requirement via the Formula Engine, availability checks against the
   ledger, reservation, issue, actual-consumption entry, and variance analysis.
+- **Phase 4 — manufacturing operations**: quality control workflow, QC-gated
+  completion that generates unique serial numbers and finished goods (posted to
+  the ledger), MRP label payloads, end-to-end serial traceability, and foam
+  cutting / quilting job-work.
 
 Feature modules (Inventory, Production, Dispatch, Warranty, …) build on this
 base — each adhering to the principles above. See

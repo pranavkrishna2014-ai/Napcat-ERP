@@ -149,6 +149,41 @@ time (never a stored fixed quantity); the evaluated formulas are snapshotted per
 material for audit. Issues flow through the same inventory choke point as Phase
 2, so every production movement is a traceable ledger entry.
 
+## Manufacturing operations (Phase 4)
+
+### Quality control & completion (per production order)
+
+| Method | Route                                | Access             | Purpose                                     |
+| ------ | ------------------------------------ | ------------------ | ------------------------------------------- |
+| POST   | `/production-orders/:id/qc/submit`   | ADMIN/PLANNER/QC   | Open a QC inspection (→ QC_PENDING)         |
+| POST   | `/production-orders/:id/qc`          | ADMIN/QC           | Record `PASS` / `FAIL` / `REWORK`           |
+| GET    | `/production-orders/:id/qc`          | any                | Inspection history                          |
+| POST   | `/production-orders/:id/complete`    | ADMIN/PLANNER      | **QC-gated**: batch + serials + finished goods + ledger output (`{warehouseId}`) |
+
+### Finished goods & serials
+
+| Method | Route                       | Access | Purpose                                   |
+| ------ | --------------------------- | ------ | ----------------------------------------- |
+| GET    | `/finished-goods?variantId=`| any    | List finished goods                       |
+| GET    | `/serials/:serial`          | any    | Full traceability (batch → PO → variant → warranty) |
+| GET    | `/serials/:serial/label`    | any    | MRP label payload (size, warranty, scannable serial) |
+
+Completion generates a unique serial per unit (`BRAND-MODEL-YYMMDD-NNNN`),
+one `FinishedGood` each, and posts a `PRODUCTION_OUTPUT` movement into
+`FINISHED_GOOD` inventory — all in one flow, gated on a QC pass.
+
+### Job-work (foam cutting / quilting)
+
+| Method | Route                    | Access                        | Purpose                                  |
+| ------ | ------------------------ | ----------------------------- | ---------------------------------------- |
+| POST   | `/job-work`              | ADMIN/PLANNER/STORE/OPERATOR  | Issue material to a `FOAM_CUTTING`/`QUILTING` job |
+| POST   | `/job-work/:id/receive`  | ADMIN/PLANNER/STORE/OPERATOR  | Receive semi-finished back (+ offcut to scrap) |
+| GET    | `/job-work`              | any                           | List (`?productionOrderId&status`)       |
+| GET    | `/job-work/:id`          | any                           | Fetch                                    |
+
+Both job-work legs are ordinary traceable ledger movements: issue consumes raw
+material; receipt posts the component into `SEMI_FINISHED`.
+
 ## Audit
 
 Every successful `POST/PUT/PATCH/DELETE` writes an `AuditLog` row: user, action,

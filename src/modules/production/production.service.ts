@@ -322,12 +322,4 @@ export class ProductionService {
       include: { material: true },
     });
   }
-
-  async complete(id: string): Promise<unknown> {
-    await this.getOrder(id);
-    return this.prisma.productionOrder.update({
-      where: { id },
-      data: { status: 'COMPLETED', completedAt: new Date() },
-    });
-  }
 }

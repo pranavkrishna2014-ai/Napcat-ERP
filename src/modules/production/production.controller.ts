@@ -102,10 +102,4 @@ export class ProductionController {
   variances(@Param('id') id: string) {
     return this.production.getVariances(id);
   }
-
-  @Post(':id/complete')
-  @Roles(AppRole.ADMIN, AppRole.PLANNER)
-  complete(@Param('id') id: string) {
-    return this.production.complete(id);
-  }
 }

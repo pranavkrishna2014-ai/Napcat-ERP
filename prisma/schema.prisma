@@ -128,6 +128,20 @@ enum FormulaVersionStatus {
   ARCHIVED
 }
 
+/// The two named factory sub-processes that consume material and return a
+/// semi-finished component.
+enum JobWorkType {
+  FOAM_CUTTING
+  QUILTING
+}
+
+enum JobWorkStatus {
+  ISSUED
+  IN_PROGRESS
+  RECEIVED
+  CANCELLED
+}
+
 // =============================================================================
 // MASTER DATA
 // =============================================================================
@@ -581,10 +595,37 @@ model ProductionOrder {
   variances    ProductionVariance[]
   qcInspections QcInspection[]
   finishedGoods FinishedGood[]
+  jobWorks     JobWork[]
 
   @@index([status])
   @@index([salesOrderId])
   @@map("production_orders")
+}
+
+/// Foam cutting / quilting sub-process: material is issued out and a
+/// semi-finished component is received back. Both legs post to the ledger.
+model JobWork {
+  id            String   @id @default(uuid())
+  reference     String   @unique
+  type          JobWorkType
+  status        JobWorkStatus @default(ISSUED)
+  productionOrderId String?
+  productionOrder ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  /// Primary input material issued to the job.
+  materialId    String?
+  warehouseId   String
+  issuedQty     Decimal  @db.Decimal(18, 6)
+  receivedQty   Decimal  @default(0) @db.Decimal(18, 6)
+  scrapQty      Decimal  @default(0) @db.Decimal(18, 6)
+  vendor        String?
+  note          String?
+  issuedAt      DateTime @default(now())
+  receivedAt    DateTime?
+  createdById   String?
+
+  @@index([status])
+  @@index([productionOrderId])
+  @@map("job_works")
 }
 
 /// Standard consumption computed by the Formula Engine at order approval.
