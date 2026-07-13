@@ -84,6 +84,12 @@ docs/                  # architecture, data model, formula engine, roadmap
 
 ## Getting started
 
+**Fastest path — Docker (one command):** `docker compose up --build`, then the
+API is at `http://localhost:3000/api` (login `admin` / `admin12345`). Full
+walk-through in [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+
+Or run it locally:
+
 ```bash
 # 1. Install dependencies
 npm install
